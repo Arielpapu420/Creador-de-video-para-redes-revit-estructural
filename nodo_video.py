@@ -100,6 +100,7 @@ PESO_ACERO_SUELTO = 0.25      # por pieza, para acero sin concreto asociado
 MIN_SEG_GRUPO = 0.7
 VER_ACERO_SIN_OBSTRUCCION = True  # "Ver sin obstrucciones" en la vista de video
 VER_ACERO_COMO_SOLIDO = True      # "Ver como sólido" en la vista de video
+ACERO_SE_TAPA_AL_COLAR = True     # al aparecer el concreto, su armado vuelve a quedar "obstruido"
 NIVEL_DETALLE_ALTO = True         # nivel de detalle Alto en la vista de video
 
 # Exportación
@@ -112,8 +113,15 @@ CATEGORIAS_OBRA = [
     ("OST_StructuralFraming", "Armazón estructural"),
     ("OST_Walls", "Muros"),
     ("OST_Floors", "Suelos"),
+    ("OST_Roofs", "Cubiertas"),
     ("OST_Stairs", "Escaleras"),
+    ("OST_Ramps", "Rampas"),
+    ("OST_GenericModel", "Modelos genéricos"),
 ]
+# Modelos genéricos: solo entran a la secuencia si alguna regla los reconoce
+# (bovedilla, tinaco, cisterna, banqueta...). Los demás quedan visibles como base.
+CATEGORIAS_SOLO_CON_REGLA = {"OST_GenericModel"}
+
 # Acero de refuerzo. OST_Rebar incluye varillas sueltas y las barras de los refuerzos
 # de área y de camino (RebarInSystem); OST_FabricReinforcement son las hojas de malla.
 CATEGORIAS_ACERO = [
@@ -128,9 +136,9 @@ CLAVES_ACERO = set(c for c, _ in CATEGORIAS_ACERO)
 # Si no se incluye el acero, también se ocultan las CATEGORIAS_ACERO.
 # Refuerzo de área/camino y áreas de malla son solo contornos: sus barras y hojas
 # (RebarInSystem, FabricSheet) sí entran en la secuencia.
-# Modelos genéricos y terreno NO se tocan: quedan visibles como base.
+# El terreno NO se toca: queda visible como base.
 CATEGORIAS_OCULTAS_SIEMPRE = [
-    "OST_Doors", "OST_Windows", "OST_Roofs", "OST_Ceilings", "OST_Railings", "OST_StairsRailing",
+    "OST_Doors", "OST_Windows", "OST_Ceilings", "OST_Railings", "OST_StairsRailing",
     "OST_Columns", "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections",
     "OST_AreaRein", "OST_PathRein", "OST_FabricAreas", "OST_Furniture", "OST_Casework", "OST_PlumbingFixtures",
     "OST_LightingFixtures", "OST_SpecialityEquipment", "OST_Levels", "OST_Grids",
@@ -141,30 +149,66 @@ CATEGORIAS_OCULTAS_SIEMPRE = [
 # -----------------------------------------------------------------------------
 #  Se evalúa de arriba abajo: la primera fila que cumple define la etapa del
 #  elemento. La columna "orden" decide qué etapa aparece primero en el video.
-#  Condiciones disponibles (ver CONDICIONES más abajo):
-#    None         siempre cumple
-#    "corrido"    cimiento corrido / losa de cimentación (no dado aislado)
-#    "desplante"  viga en la Z más baja del nivel, cerca del nivel
+#  Categoría "*" = cualquier categoría de CATEGORIAS_OBRA.
+#  Condiciones:
+#    None                 siempre cumple
+#    "palabras:a|b|c"     el nombre del tipo, de la familia o de un material
+#                         contiene alguna palabra (sin importar mayúsculas ni acentos)
+#    "piedra"             material o tipo de piedra/roca/mampostería y enterrado
+#                         (cimiento de mampostería); un muro de piedra sobre el
+#                         terreno sigue de largo y cae en "muros"
+#    "corrido"            cimiento corrido / losa de cimentación (no dado aislado)
+#    "desplante"          viga en la Z más baja del nivel, cerca del nivel
+#    "vigueta_tamano"     viga chica (ancho y peralte máximos abajo): vigueta
+#    "firme"              suelo apoyado en su propio nivel (firme, no losa)
+#    "fuera_de_huella"    suelo/rampa/escalera a nivel de terreno, fuera de la huella
+#                         de la estructura (banquetas, patios, andadores)
 #  Para cambiar la secuencia: mueve filas, cambia "orden" o agrega filas.
 REGLAS_ETAPA = [
     # orden  etapa          categoría                    condición
+    (27,     "cisterna",    "*",                         "palabras:cisterna|aljibe"),
+    (96,     "tinaco",      "*",                         "palabras:tinaco"),
+    (64,     "viguetas",    "*",                         "palabras:vigueta|joist"),
+    (66,     "bovedillas",  "*",                         "palabras:bovedilla|caseton|poliestireno"),
+    (5,      "exteriores",  "*",                         "palabras:banqueta|andador|pavimento|estacionamiento"),
+    (5,      "exteriores",  "*",                         "fuera_de_huella"),
+    (25,     "mamposteria", "OST_Walls",                 "piedra"),
+    (25,     "mamposteria", "OST_StructuralFoundation",  "piedra"),
     (10,     "cimentacion", "OST_StructuralFoundation",  "corrido"),
     (20,     "dados",       "OST_StructuralFoundation",  None),
     (30,     "desplante",   "OST_StructuralFraming",     "desplante"),
+    (64,     "viguetas",    "OST_StructuralFraming",     "vigueta_tamano"),
+    (35,     "firme",       "OST_Floors",                "firme"),
     (40,     "columnas",    "OST_StructuralColumns",     None),
     (50,     "muros",       "OST_Walls",                 None),
     (60,     "trabes",      "OST_StructuralFraming",     None),
     (70,     "losas",       "OST_Floors",                None),
+    (70,     "losas",       "OST_Roofs",                 None),
     (80,     "escaleras",   "OST_Stairs",                None),
+    (85,     "rampas",      "OST_Ramps",                 None),
 ]
 ETAPA_OTROS = (90, "otros")          # si ninguna fila cumple
 ETAPA_ACERO_SUELTO = (35, "acero")   # acero sin anfitrión ni concreto que lo contenga
 # El acero toma la etapa de su anfitrión (o del concreto que lo contiene) y
 # aparece antes que todo el concreto de esa etapa.
+ETAPAS_AL_FINAL = ("exteriores",)    # se construyen después del último nivel
 
 # Palabras clave en el nombre del TIPO (minúsculas, sin importar acentos)
 PALABRAS_AISLADO = ("dado", "zapata aislada", "pila", "pilote", "candelero")
 PALABRAS_CORRIDO = ("corrid", "cimiento", "losa de cimentacion", "contratrabe")
+# Material o tipo de piedra (cimiento de mampostería)
+PALABRAS_PIEDRA = ("piedra", "roca", "mamposter", "braza")
+
+# Criterios geométricos (en metros)
+VIGUETA_ANCHO_MAX_M = 0.13     # viga de ancho y peralte menores o iguales = vigueta
+VIGUETA_PERALTE_MAX_M = 0.20
+ENTERRADO_TOL_M = 0.15         # "piedra": parte superior <= nivel + esto
+FIRME_TOL_M = 0.15             # "firme": parte superior <= su nivel + esto
+EXTERIOR_ALTURA_MAX_M = 0.45   # "fuera_de_huella": parte superior <= nivel más bajo + esto
+HUELLA_MARGEN_M = 0.5          # la huella = columnas (o muros) en planta + este margen
+# Los modelos genéricos solo entran como exteriores por palabra clave (no por huella),
+# para no meter árboles, autos o mobiliario urbano a la secuencia.
+CATEGORIAS_EXTERIOR = ("OST_Floors", "OST_Ramps", "OST_Stairs")
 
 
 # =============================================================================
@@ -216,6 +260,42 @@ def nombre_tipo(doc, elemento):
     return ""
 
 
+def nombre_elemento(e):
+    """Nombre de cualquier elemento (también tipos y materiales) sin depender de .Name."""
+    try:
+        return Element.Name.GetValue(e) or ""
+    except Exception:
+        try:
+            return e.Name or ""
+        except Exception:
+            return ""
+
+
+def nombre_familia(doc, elemento):
+    try:
+        tipo = doc.GetElement(elemento.GetTypeId())
+        return (tipo.FamilyName or "") if tipo is not None else ""
+    except Exception:
+        return ""
+
+
+def nombres_materiales(doc, elemento, cache):
+    """Nombres de los materiales del elemento (GetMaterialIds), con caché por id."""
+    nombres = []
+    try:
+        ids = elemento.GetMaterialIds(False)
+    except Exception:
+        return nombres
+    for mid in ids:
+        k = id_entero(mid)
+        if k not in cache:
+            m = doc.GetElement(mid)
+            cache[k] = nombre_elemento(m) if m is not None else ""
+        if cache[k]:
+            nombres.append(cache[k])
+    return nombres
+
+
 def nombre_clase(elemento):
     try:
         return elemento.GetType().Name
@@ -258,7 +338,7 @@ class Config(object):
 class Pieza(object):
     """Un elemento del modelo dentro de la secuencia de obra."""
 
-    def __init__(self, elemento, cat, etiqueta_cat, caja, clase, tipo, anfitrion):
+    def __init__(self, elemento, cat, etiqueta_cat, caja, clase, tipo, anfitrion, familia="", materiales=()):
         self.elemento = elemento
         self.eid = elemento.Id
         self.clave = id_entero(elemento.Id)
@@ -270,7 +350,12 @@ class Pieza(object):
         self.cy = 0.5 * (self.ymin + self.ymax)
         self.clase = clase
         self.tipo = tipo
+        self.familia = familia
+        self.materiales = list(materiales)
+        # Texto donde buscan las reglas "palabras:" (tipo, familia y materiales)
+        self.texto = _sin_acentos(" | ".join([tipo, familia] + self.materiales))
         self.anfitrion = anfitrion
+        self.cubre = None   # para el acero: clave del concreto que lo tapa al colarse
         self.nivel = 0
         self.orden = 0
         self.etapa = ""
@@ -298,6 +383,7 @@ class Informe(object):
         self.notas = []
         self.errores = []
         self.conteo = {}
+        self.tipos = {}
         self.omitidos = []
         self.niveles = []
         self.parametros = []
@@ -330,18 +416,29 @@ class Informe(object):
             for i, (elev, nombre) in enumerate(self.niveles):
                 L.append("  [%d] %-30s %8.2f" % (i, nombre, elev * 0.3048))
             L.append("")
+        def nombre_nivel(niv):
+            return self.niveles[niv][1] if niv < len(self.niveles) else "(al final de la obra)"
+
         L.append("ELEMENTOS POR CATEGORÍA Y ETAPA (en orden de aparición)")
         if self.conteo:
             L.append("  %-5s %-22s %-14s %-26s %s" % ("Niv.", "Nombre nivel", "Etapa", "Categoría", "Cant."))
             total = 0
             for (niv, orden, etapa, cat), n in sorted(self.conteo.items()):
-                nom = self.niveles[niv][1] if niv < len(self.niveles) else "?"
-                L.append("  %-5d %-22s %-14s %-26s %d" % (niv, nom[:22], etapa, cat, n))
+                L.append("  %-5d %-22s %-14s %-26s %d" % (niv, nombre_nivel(niv)[:22], etapa, cat, n))
                 total += n
             L.append("  Total en la secuencia: %d" % total)
         else:
             L.append("  (ninguno)")
         L.append("")
+        if self.tipos:
+            L.append("TIPOS DE REVIT POR ETAPA (revisa que cada tipo haya caído en la etapa correcta;")
+            L.append("si no, ajusta REGLAS_ETAPA o las palabras clave en nodo_video.py)")
+            for (niv, orden, etapa), tipos in sorted(self.tipos.items()):
+                L.append("  [%d %s] %s" % (niv, nombre_nivel(niv), etapa))
+                for (cat, tipo, mats), n in sorted(tipos.items()):
+                    extra = ("  · materiales: " + mats) if mats else ""
+                    L.append("      %4d  %s: %s%s" % (n, cat, tipo or "(sin tipo)", extra))
+            L.append("")
         if self.omitidos:
             L.append("ELEMENTOS OMITIDOS DE LA SECUENCIA")
             for t in self.omitidos:
@@ -458,6 +555,7 @@ def recoger_piezas(doc, vista_base, incluir_acero, inf):
         categorias += CATEGORIAS_ACERO
     vistos = set()
     piezas = []
+    cache_mat = {}
     for cat, etiqueta in categorias:
         try:
             bic = getattr(BuiltInCategory, cat)
@@ -482,8 +580,12 @@ def recoger_piezas(doc, vista_base, incluir_acero, inf):
             if caja is None:
                 inf.omitidos.append("%d (%s): sin BoundingBox" % (k, etiqueta))
                 continue
-            anf = anfitrion_de(e) if cat in CLAVES_ACERO else None
-            piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e), anf))
+            if cat in CLAVES_ACERO:
+                piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e),
+                                    anfitrion_de(e)))
+            else:
+                piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e), None,
+                                    nombre_familia(doc, e), nombres_materiales(doc, e, cache_mat)))
     return piezas
 
 
@@ -500,13 +602,62 @@ def nivel_de(z, niveles):
     return idx
 
 
+M_A_PIES = 1.0 / 0.3048
+
+
 def _es_corrido(p, ctx):
-    t = _sin_acentos(p.tipo)
+    t = p.texto
     if any(w in t for w in PALABRAS_AISLADO):
         return False
     if any(w in t for w in PALABRAS_CORRIDO):
         return True
     return p.clase in ("WallFoundation", "Floor")
+
+
+def _es_piedra(p, ctx):
+    """Cimiento de mampostería: material/tipo de piedra y enterrado (no barda)."""
+    if not any(w in p.texto for w in PALABRAS_PIEDRA):
+        return False
+    elev = ctx["niveles"][p.nivel][0]
+    return p.zmax <= elev + ENTERRADO_TOL_M * M_A_PIES
+
+
+def _es_vigueta_por_tamano(p, ctx):
+    ancho = min(p.xmax - p.xmin, p.ymax - p.ymin)
+    peralte = p.zmax - p.zmin
+    return (ancho <= VIGUETA_ANCHO_MAX_M * M_A_PIES + 1e-6 and
+            peralte <= VIGUETA_PERALTE_MAX_M * M_A_PIES + 1e-6)
+
+
+def _es_firme(p, ctx):
+    elev = ctx["niveles"][p.nivel][0]
+    return p.zmax <= elev + FIRME_TOL_M * M_A_PIES
+
+
+def _fuera_de_huella(p, ctx):
+    huella = ctx["huella"]
+    if huella is None or p.cat not in CATEGORIAS_EXTERIOR:
+        return False
+    if p.zmax > ctx["niveles"][0][0] + EXTERIOR_ALTURA_MAX_M * M_A_PIES:
+        return False
+    x0, y0, x1, y1 = huella
+    return not (x0 <= p.cx <= x1 and y0 <= p.cy <= y1)
+
+
+def _palabras(texto_condicion):
+    palabras = [_sin_acentos(w.strip()) for w in texto_condicion.split(":", 1)[1].split("|") if w.strip()]
+    return lambda p, ctx: any(w in p.texto for w in palabras)
+
+
+def _huella(piezas):
+    """Rectángulo en planta de columnas (o muros) + margen: la "huella" de la estructura."""
+    for cats in (("OST_StructuralColumns",), ("OST_Walls",)):
+        sel = [p for p in piezas if p.cat in cats and not p.acero]
+        if sel:
+            m = HUELLA_MARGEN_M * M_A_PIES
+            return (min(p.xmin for p in sel) - m, min(p.ymin for p in sel) - m,
+                    max(p.xmax for p in sel) + m, max(p.ymax for p in sel) + m)
+    return None
 
 
 def _es_desplante(p, ctx):
@@ -522,7 +673,24 @@ CONDICIONES = {
     None: lambda p, ctx: True,
     "corrido": _es_corrido,
     "desplante": _es_desplante,
+    "piedra": _es_piedra,
+    "vigueta_tamano": _es_vigueta_por_tamano,
+    "firme": _es_firme,
+    "fuera_de_huella": _fuera_de_huella,
 }
+
+
+def _reglas_compiladas():
+    reglas = []
+    for orden, etapa, cat, cond in REGLAS_ETAPA:
+        if isinstance(cond, str) and cond.startswith("palabras:"):
+            prueba = _palabras(cond)
+        elif cond in CONDICIONES:
+            prueba = CONDICIONES[cond]
+        else:
+            raise ValueError("Condición desconocida en REGLAS_ETAPA: %r" % (cond,))
+        reglas.append((orden, etapa, cat, prueba))
+    return reglas
 
 
 def _clave_base(p, sub):
@@ -549,23 +717,33 @@ def ordenar_piezas(piezas, niveles, inf):
     for p in piezas:
         p.nivel = nivel_de(p.zmin, niveles)
 
+    reglas = _reglas_compiladas()
     min_armazon = {}
     for p in piezas:
-        if p.cat == "OST_StructuralFraming":
+        if p.cat == "OST_StructuralFraming" and not _es_vigueta_por_tamano(p, None):
             actual = min_armazon.get(p.nivel)
             min_armazon[p.nivel] = p.zmin if actual is None else min(actual, p.zmin)
-    ctx = {"niveles": niveles, "min_armazon": min_armazon}
+    ctx = {"niveles": niveles, "min_armazon": min_armazon, "huella": _huella(piezas)}
 
     por_clave = {}
-    concretos = [p for p in piezas if not p.acero]
-    for p in concretos:
+    concretos = []
+    for p in piezas:
+        if p.acero:
+            continue
         p.orden, p.etapa = ETAPA_OTROS
-        for orden, etapa, cat, cond in REGLAS_ETAPA:
-            if cat == p.cat and CONDICIONES[cond](p, ctx):
+        for orden, etapa, cat, prueba in reglas:
+            if (cat == "*" or cat == p.cat) and prueba(p, ctx):
                 p.orden, p.etapa = orden, etapa
                 break
+        if p.cat in CATEGORIAS_SOLO_CON_REGLA and p.etapa == ETAPA_OTROS[1]:
+            p.etapa = None  # sin regla: queda como base visible, fuera de la secuencia
+            continue
+        if p.etapa in ETAPAS_AL_FINAL:
+            p.nivel = len(niveles)
         p.clave_orden = _clave_base(p, 1)
         por_clave[p.clave] = p
+        concretos.append(p)
+    piezas = [p for p in piezas if p.acero or p.etapa is not None]
 
     # Acero: toma nivel y etapa de su anfitrión (o del concreto que lo contiene)
     # y va en el grupo "armado" (sub = 0), antes de todo el concreto de la etapa.
@@ -579,6 +757,7 @@ def ordenar_piezas(piezas, niveles, inf):
             sin_anfitrion += 1
         if anf is not None:
             p.nivel, p.orden, p.etapa, p.armado = anf.nivel, anf.orden, anf.etapa, True
+            p.cubre = anf.clave
             p.clave_orden = _clave_base(p, 0)
         else:
             p.orden, p.etapa = ETAPA_ACERO_SUELTO
@@ -604,11 +783,17 @@ def ordenar_piezas(piezas, niveles, inf):
                 p.peso = total / len(armado)
 
     piezas.sort(key=lambda p: p.clave_orden)
+    return piezas
 
+
+def contar(piezas, inf):
     for p in piezas:
         k = (p.nivel, p.orden, p.etapa, p.etiqueta_cat)
         inf.conteo[k] = inf.conteo.get(k, 0) + 1
-    return piezas
+        if not p.acero:
+            g = inf.tipos.setdefault((p.nivel, p.orden, p.etapa), {})
+            t = (p.etiqueta_cat, p.tipo, ", ".join(sorted(set(p.materiales))))
+            g[t] = g.get(t, 0) + 1
 
 
 def asegurar_minimo(piezas, fraccion):
@@ -640,11 +825,13 @@ def construir_guion(piezas, cfg):
     t_fin = FRACCION_FIN_OBRA * cfg.duracion
     if t_fin > t_ini:
         asegurar_minimo(piezas, MIN_SEG_GRUPO / (t_fin - t_ini))
-    acumulado = []
+    # Cada pieza aparece al INICIO de su intervalo de tiempo y su rótulo dura todo el
+    # intervalo (así una losa de una sola pieza se ve el tiempo que le toca).
+    inicios = []
     suma = 0.0
     for p in piezas:
+        inicios.append(suma)
         suma += p.peso
-        acumulado.append(suma)
     cuadros = []
     for i in range(n):
         t = i / float(cfg.fps)
@@ -655,7 +842,7 @@ def construir_guion(piezas, cfg):
         else:
             avance = (t - t_ini) / (t_fin - t_ini)
             fase = "obra"
-            visibles = bisect.bisect_right(acumulado, avance * suma + 1e-9)
+            visibles = bisect.bisect_left(inicios, avance * suma - 1e-9) if avance > 0 else 0
         u = i / float(n - 1) if n > 1 else 1.0
         if SUAVIZAR_GIRO:
             u = 0.5 - 0.5 * math.cos(math.pi * u)
@@ -887,6 +1074,14 @@ def exportar(doc, vista, piezas, cuadros, cfg, inf):
     existentes = cuadros_existentes(cfg.carpeta)
     inf.parametros.append(("Encuadre (m)", "%.2f x %.2f" % (2 * semi_ancho * 0.3048, 2 * semi_alto * 0.3048)))
 
+    # Acero que se "tapa" cuando aparece su concreto (vuelve a quedar obstruido)
+    tapa = {}
+    if cfg.acero and VER_ACERO_SIN_OBSTRUCCION and ACERO_SE_TAPA_AL_COLAR:
+        for p in piezas:
+            if p.armado and p.cubre is not None:
+                tapa.setdefault(p.cubre, []).append(p)
+    fallas_tapado = []
+
     visibles = 0  # tras preparar_vista, todas las piezas están ocultas
     seguidos = 0
     for c in cuadros:
@@ -898,8 +1093,15 @@ def exportar(doc, vista, piezas, cuadros, cfg, inf):
             TransactionManager.Instance.EnsureInTransaction(doc)
             try:
                 if c.visibles > visibles:
-                    vista.UnhideElements(lista_ids([p.eid for p in piezas[visibles:c.visibles]]))
+                    nuevas = piezas[visibles:c.visibles]
+                    vista.UnhideElements(lista_ids([p.eid for p in nuevas]))
                     visibles = c.visibles
+                    for q in nuevas:
+                        for a in tapa.get(q.clave, ()):
+                            try:
+                                a.elemento.SetUnobscuredInView(vista, False)
+                            except Exception as ex:
+                                fallas_tapado.append("%d: %s" % (a.clave, ex))
                 vista.SetOrientation(orientacion_camara(centro, c.azimut, distancia))
                 doc.Regenerate()
                 ajustar_recorte(vista, centro, semi_ancho, semi_alto, diagonal)
@@ -921,6 +1123,9 @@ def exportar(doc, vista, piezas, cuadros, cfg, inf):
                 inf.nota("Se detuvo tras %d errores seguidos. Corrige y vuelve a ejecutar: "
                          "los cuadros hechos se saltan." % seguidos)
                 break
+    if fallas_tapado:
+        inf.nota("No se pudo tapar el armado al colar en %d piezas, primeras: %s"
+                 % (len(fallas_tapado), "; ".join(fallas_tapado[:5])))
 
 
 # =============================================================================
@@ -959,8 +1164,9 @@ def ejecutar(entradas):
         piezas = recoger_piezas(doc, vista_base, cfg.acero, inf)
         if not piezas:
             raise ValueError("No se encontraron elementos estructurales visibles en la vista base.")
-        vista, piezas = preparar_vista(doc, vista_base, piezas, cfg.acero, inf)
         piezas = ordenar_piezas(piezas, niveles, inf)
+        vista, piezas = preparar_vista(doc, vista_base, piezas, cfg.acero, inf)
+        contar(piezas, inf)
         cuadros = construir_guion(piezas, cfg)
         inf.cuadros_total = len(cuadros)
         escribir_guion(os.path.join(carpeta, NOMBRE_GUION), cfg, niveles, piezas, cuadros)

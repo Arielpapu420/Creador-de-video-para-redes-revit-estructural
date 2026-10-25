@@ -5,20 +5,28 @@ No corresponde a ningún proyecto real. Planta de 8 x 10 m con ejes a cada 4 y 5
 Las medidas se escriben en metros y se convierten a pies (unidades internas de Revit).
 
 Contenido:
-  - Terreno (Toposolid) con excavación y fondo de excavación (Modelo genérico), banqueta.
-  - Cimientos corridos (WallFoundation) bajo cada tramo de muro.
-  - Dados (FamilyInstance de Cimentación estructural) en cada cruce de ejes.
-  - Cadenas de desplante (Armazón estructural en la Z más baja).
-  - Columnas en cruces y castillos a media crujía (Pilares estructurales).
-  - Muros de carga, trabes/cadenas de cerramiento y losas en planta baja y planta alta.
-  - Escalera, pretiles de azotea, una puerta y un muro oculto en la vista base.
+  - Terreno (Toposolid) con excavación; fondo de excavación y guarnición (Modelos genéricos
+    sin regla: quedan como base).
+  - Cimiento de mampostería de piedra en el perímetro: Muros con material "Piedra braza" (el
+    tipo NO dice piedra: se reconoce por el material). Cimientos corridos de concreto
+    (WallFoundation) en los ejes interiores y dados en cada cruce de ejes.
+  - Cisterna enterrada (muros, fondo y tapa, con "cisterna" en el tipo).
+  - Cadenas de desplante y firme de concreto de planta baja.
+  - Columnas en cruces y castillos a media crujía; muros de block; dala de repartición,
+    cerramiento de puerta y cadenas de cerramiento.
+  - Planta baja: losa maciza, volado (marquesina) y losa de vigueta y bovedilla. Las viguetas
+    son "mini trabes" (Armazón estructural de 12x13 cm cuyo tipo NO dice vigueta: se
+    reconocen por tamaño); bovedillas como Modelo genérico; firme de compresión con malla.
+  - Planta alta y losa de azotea; pretiles; base de tinaco y tinaco.
+  - Exteriores: banqueta (por palabra clave) y patio (por estar fuera de la huella).
+  - Escalera, una puerta y un muro oculto en la vista base.
   - Acero con su anfitrión: varillas y estribos en columnas, castillos, cadenas y trabes;
-    parrillas en cimientos corridos y dados; refuerzo de área (RebarInSystem) en la losa de
-    planta baja; malla electrosoldada (FabricSheet) en la losa de azotea. Además, una varilla
-    sin anfitrión dentro de una columna y otra fuera de todo concreto.
+    parrillas en cimientos corridos y dados; varillas en muros de cisterna; refuerzo de área
+    (RebarInSystem) en losas macizas; mallas (FabricSheet) en firme de compresión y azotea.
+    Además, una varilla sin anfitrión dentro de una columna y otra fuera de todo concreto.
 """
 from Autodesk.Revit.DB import (
-    BuiltInCategory, Category, Document, FamilyInstance, FamilySymbol, Floor, FloorType,
+    BuiltInCategory, Category, Document, FamilyInstance, Material, FamilySymbol, Floor, FloorType,
     FabricSheet, Level, Rebar, RebarBarType, RebarInSystem, Stairs, StairsType, Toposolid, View3D, Wall,
     WallFoundation, WallFoundationType, WallType,
 )
@@ -80,8 +88,13 @@ class _Constructor(object):
         self.ids.setdefault(rol, []).append(e.Id.Value)
         return e
 
-    def tipo(self, clase, nombre, cat):
-        return self.nuevo(clase, "tipos", nombre, cat)
+    def tipo(self, clase, nombre, cat, familia=""):
+        t = self.nuevo(clase, "tipos", nombre, cat)
+        object.__setattr__(t, "_familia", familia)
+        return t
+
+    def material(self, nombre):
+        return self.nuevo(Material, "materiales", nombre).Id.Value
 
 
 def crear_documento():
@@ -105,35 +118,66 @@ def crear_documento():
     t_varilla = b.tipo(RebarBarType, "Varilla 3/8", "OST_Rebar")
     t_malla = b.tipo(FamilySymbol, "Malla 6x6-10/10", "OST_FabricReinforcement")
     t_generico = b.tipo(FamilySymbol, "Genérico", "OST_GenericModel")
+    t_mamposteria = b.tipo(WallType, "Muro estructural 50 cm", "OST_Walls")
+    t_cisterna = b.tipo(WallType, "Muro de concreto cisterna 15 cm", "OST_Walls")
+    t_losa_cisterna = b.tipo(FloorType, "Losa de cisterna 15 cm", "OST_Floors")
+    t_firme = b.tipo(FloorType, "Firme de concreto 8 cm", "OST_Floors")
+    t_vigueta = b.tipo(FamilySymbol, "VP 12-5", "OST_StructuralFraming", familia="Elemento prefabricado")
+    t_bovedilla = b.tipo(FamilySymbol, "Bovedilla 15x25x56", "OST_GenericModel", familia="Bovedilla")
+    t_compresion = b.tipo(FloorType, "Firme de compresión 5 cm", "OST_Floors")
+    t_dala = b.tipo(FamilySymbol, "Dala de repartición 15x10", "OST_StructuralFraming")
+    t_cerr_puerta = b.tipo(FamilySymbol, "Cerramiento 15x20", "OST_StructuralFraming")
+    t_base_tinaco = b.tipo(FloorType, "Base de tinaco", "OST_Floors")
+    t_tinaco = b.tipo(FamilySymbol, "Tinaco 1100 L", "OST_GenericModel", familia="Tinaco")
+    t_banqueta = b.tipo(FloorType, "Banqueta de concreto 10 cm", "OST_Floors")
+    t_patio = b.tipo(FloorType, "Concreto estampado 10 cm", "OST_Floors")
+    m_piedra = b.material("Piedra braza")
+    m_concreto = b.material("Concreto f'c=250")
+    m_block = b.material("Block de concreto")
     t_puerta = b.tipo(FamilySymbol, "Puerta 90x210", "OST_Doors")
 
     # Terreno con excavación (anillo alrededor de la huella) + fondo de excavación
-    hx0, hy0, hx1, hy1 = -1.2, -1.2, 9.2, 11.2
+    hx0, hy0, hx1, hy1 = -1.2, -1.2, 12.0, 11.2
     tx0, ty0, tx1, ty1 = -12.0, -12.0, 20.0, 22.0
     anillo = [_caja(tx0, ty0, -0.2, tx1, hy0, 0.0), _caja(tx0, hy1, -0.2, tx1, ty1, 0.0),
               _caja(tx0, hy0, -0.2, hx0, hy1, 0.0), _caja(hx1, hy0, -0.2, tx1, hy1, 0.0)]
     b.nuevo(Toposolid, "terreno", "Terreno", "OST_Toposolid", None, anillo)
     b.nuevo(FamilyInstance, "genericos", "Fondo de excavación", "OST_GenericModel", t_generico,
             [_caja(hx0, hy0, -1.25, hx1, hy1, -1.15)])
-    b.nuevo(FamilyInstance, "genericos", "Banqueta", "OST_GenericModel", t_generico,
-            [_caja(-1.2, -3.0, 0.0, 9.2, -1.8, 0.1)])
+    b.nuevo(FamilyInstance, "genericos", "Guarnición", "OST_GenericModel", t_generico,
+            [_caja(-1.2, -3.3, 0.0, 12.0, -3.1, 0.15)])
 
     tramos = _tramos()
     cruces = [(x, y) for x in EJES_X for y in EJES_Y]
 
-    # Cimentación
-    for x0, y0, x1, y1, _ in tramos:
-        b.nuevo(WallFoundation, "corridos", "", "OST_StructuralFoundation", t_corrido,
-                [_caja_lineal(x0, y0, x1, y1, 0.6, -0.8, -0.3)])
+    # Cimentación: mampostería de piedra en el perímetro, concreto en los ejes interiores
+    for x0, y0, x1, y1, perim in tramos:
+        if perim:
+            b.nuevo(Wall, "mamposteria", "", "OST_Walls", t_mamposteria,
+                    [_caja_lineal(x0, y0, x1, y1, 0.5, -0.9, -0.3)], materiales=[m_piedra])
+        else:
+            b.nuevo(WallFoundation, "corridos", "", "OST_StructuralFoundation", t_corrido,
+                    [_caja_lineal(x0, y0, x1, y1, 0.6, -0.8, -0.3)], materiales=[m_concreto])
     for x, y in cruces:
         b.nuevo(FamilyInstance, "dados", "", "OST_StructuralFoundation", t_dado,
                 [_caja(x - 0.3, y - 0.3, -1.1, x + 0.3, y + 0.3, -0.5)])
+
+    # Cisterna enterrada fuera de la casa: muros, fondo y tapa
+    cx0, cy0, cx1, cy1 = 9.6, 1.0, 11.6, 3.0
+    for x0, y0, x1, y1 in ((cx0, cy0, cx1, cy0), (cx0, cy1, cx1, cy1), (cx0, cy0, cx0, cy1), (cx1, cy0, cx1, cy1)):
+        b.nuevo(Wall, "cisterna", "", "OST_Walls", t_cisterna,
+                [_caja_lineal(x0, y0, x1, y1, 0.15, -2.0, 0.0)], materiales=[m_concreto])
+    b.nuevo(Floor, "cisterna", "", "OST_Floors", t_losa_cisterna, [_caja(cx0, cy0, -2.15, cx1, cy1, -2.0)])
+    b.nuevo(Floor, "cisterna", "", "OST_Floors", t_losa_cisterna, [_caja(cx0, cy0, 0.0, cx1, cy1, 0.12)])
 
     columnas_pb, armazon = [], []
     for x0, y0, x1, y1, _ in tramos:
         e = b.nuevo(FamilyInstance, "desplante", "", "OST_StructuralFraming", t_desplante,
                     [_caja_lineal(x0, y0, x1, y1, 0.15, -0.3, 0.0)])
         armazon.append((e, x0, y0, x1, y1, -0.3, 0.0))
+
+    # Firme de planta baja (sobre el terreno, dentro de la casa)
+    b.nuevo(Floor, "firme", "", "OST_Floors", t_firme, [_caja(0.075, 0.075, -0.08, 7.925, 9.925, 0.0)])
 
     def planta(rol, z0, z_trabe, z_losa, z_tope):
         cols = []
@@ -152,12 +196,36 @@ def crear_documento():
             e = b.nuevo(FamilyInstance, "trabes_" + rol, "", "OST_StructuralFraming", t_cerramiento,
                         [_caja_lineal(x0, y0, x1, y1, 0.15, z_trabe, z_losa)])
             armazon.append((e, x0, y0, x1, y1, z_trabe, z_losa))
-        for xa, xb in ((-0.1, 4.0), (4.0, 8.1)):
-            b.nuevo(Floor, "losas_" + rol, "", "OST_Floors", t_losa,
-                    [_caja(xa, -0.1, z_losa, xb, 10.1, z_tope)])
+        if rol == "pb":
+            # Losa maciza, volado y losa de vigueta y bovedilla
+            b.nuevo(Floor, "losas_maciza", "", "OST_Floors", t_losa, [_caja(-0.1, -0.1, z_losa, 4.0, 10.1, z_tope)])
+            b.nuevo(Floor, "losas_maciza", "", "OST_Floors", t_losa, [_caja(0.0, -1.2, z_losa, 4.0, -0.1, z_tope)])
+            zv = z_tope - 0.05
+            for ya, yb in ((0.0, 5.0), (5.0, 10.0)):
+                ys = [ya + 0.6 + 0.7 * k for k in range(7) if ya + 0.6 + 0.7 * k < yb - 0.3]
+                for y in ys:
+                    b.nuevo(FamilyInstance, "viguetas", "", "OST_StructuralFraming", t_vigueta,
+                            [_caja(4.0, y - 0.06, zv - 0.13, 8.0, y + 0.06, zv)])
+                for y_a, y_b in zip([ya + 0.075] + [y + 0.06 for y in ys], [y - 0.06 for y in ys] + [yb - 0.075]):
+                    b.nuevo(FamilyInstance, "bovedillas", "", "OST_GenericModel", t_bovedilla,
+                            [_caja(4.075 + 0.6 * k, y_a, zv - 0.13, min(4.075 + 0.6 * (k + 1) - 0.02, 7.925), y_b, zv)
+                             for k in range(7)])
+            b.nuevo(Floor, "losas_compresion", "", "OST_Floors", t_compresion,
+                    [_caja(4.0, -0.1, zv, 8.1, 10.1, z_tope)])
+        else:
+            for xa, xb in ((-0.1, 4.0), (4.0, 8.1)):
+                b.nuevo(Floor, "losas_" + rol, "", "OST_Floors", t_losa,
+                        [_caja(xa, -0.1, z_losa, xb, 10.1, z_tope)])
         return cols
 
     columnas_pb = planta("pb", 0.0, 2.6, 2.9, 3.0)
+    # Dala de repartición y cerramiento de la puerta (planta baja)
+    e = b.nuevo(FamilyInstance, "trabes_pb", "", "OST_StructuralFraming", t_dala,
+                [_caja_lineal(0.0, 10.0, 4.0, 10.0, 0.15, 1.3, 1.4, recorte=0.125)])
+    armazon.append((e, 0.125, 10.0, 3.875, 10.0, 1.3, 1.4))
+    e = b.nuevo(FamilyInstance, "trabes_pb", "", "OST_StructuralFraming", t_cerr_puerta,
+                [_caja_lineal(1.4, 0.0, 2.6, 0.0, 0.15, 2.1, 2.3)])
+    armazon.append((e, 1.4, 0.0, 2.6, 0.0, 2.1, 2.3))
     columnas_pa = planta("pa", 3.0, 5.6, 5.9, 6.0)
 
     # Escalera de planta baja: 16 peraltes de 18 cm
@@ -170,6 +238,14 @@ def crear_documento():
         if perim:
             b.nuevo(Wall, "pretiles", "", "OST_Walls", t_pretil,
                     [_caja_lineal(x0, y0, x1, y1, 0.12, 6.0, 6.9)])
+
+    # Base de tinaco y tinaco en la azotea
+    b.nuevo(Floor, "tinaco", "", "OST_Floors", t_base_tinaco, [_caja(6.3, 8.0, 6.0, 7.7, 9.4, 6.4)])
+    b.nuevo(FamilyInstance, "tinaco", "", "OST_GenericModel", t_tinaco, [_caja(6.5, 8.2, 6.4, 7.5, 9.2, 7.6)])
+
+    # Exteriores: banqueta (palabra clave) y patio (fuera de la huella, sin palabra clave)
+    b.nuevo(Floor, "exteriores", "", "OST_Floors", t_banqueta, [_caja(-1.2, -3.0, 0.0, 12.0, -1.8, 0.1)])
+    b.nuevo(Floor, "exteriores", "", "OST_Floors", t_patio, [_caja(8.8, 4.0, -0.1, 11.6, 7.0, 0.0)])
 
     # Una puerta (se oculta por categoría) y un muro provisional oculto en la vista base
     b.nuevo(FamilyInstance, "puertas", "", "OST_Doors", t_puerta, [_caja(1.55, -0.08, 0.0, 2.45, 0.08, 2.1)])
@@ -249,8 +325,7 @@ def crear_documento():
         cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.015) for x in pasos(x0 + 0.07, x1 - 0.07, 0.15)]
         nueva_varilla("varillas", cajas, i)
 
-    # Losa de planta baja: refuerzo de área (barras RebarInSystem) @ 30 cm, un lecho por sentido
-    for i in b.ids["losas_pb"]:
+    def refuerzo_area(i):
         x0, y0, z0, x1, y1, z1 = en_m(i)
         z = z0 + 0.03
         nueva_varilla("varillas_area", [varilla_x(x0 + 0.05, x1 - 0.05, y, z)
@@ -258,13 +333,32 @@ def crear_documento():
         nueva_varilla("varillas_area", [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.015)
                                         for x in pasos(x0 + 0.1, x1 - 0.1, 0.3)], i, clase=RebarInSystem)
 
-    # Losa de azotea: malla electrosoldada (FabricSheet) @ 15 cm
-    for i in b.ids["losas_pa"]:
+    def malla(i, sep):
         x0, y0, z0, x1, y1, z1 = en_m(i)
-        z = z0 + 0.04
-        cajas = [varilla_x(x0 + 0.05, x1 - 0.05, y, z) for y in pasos(y0 + 0.1, y1 - 0.1, 0.15)]
-        cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.012) for x in pasos(x0 + 0.1, x1 - 0.1, 0.15)]
+        z = z0 + 0.5 * (z1 - z0)
+        cajas = [varilla_x(x0 + 0.05, x1 - 0.05, y, z) for y in pasos(y0 + 0.1, y1 - 0.1, sep)]
+        cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.012) for x in pasos(x0 + 0.1, x1 - 0.1, sep)]
         nueva_varilla("mallas", cajas, i, clase=FabricSheet, cat="OST_FabricReinforcement", tipo=t_malla)
+
+    # Losas macizas de planta baja (incluye el volado): refuerzo de área @ 30 cm
+    for i in b.ids["losas_maciza"]:
+        refuerzo_area(i)
+    # Firme de compresión de la vigueta y bovedilla y losa de azotea: malla
+    for i in b.ids["losas_compresion"]:
+        malla(i, 0.15)
+    for i in b.ids["losas_pa"]:
+        malla(i, 0.15)
+    # Muros de cisterna: varillas verticales @ 25 cm
+    for i in b.ids["cisterna"]:
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        if z1 - z0 < 1.0:
+            continue  # fondo y tapa
+        xc, yc = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        if (x1 - x0) > (y1 - y0):
+            cajas = [varilla_z(z0 + 0.05, z1 - 0.05, x, yc) for x in pasos(x0 + 0.1, x1 - 0.1, 0.25)]
+        else:
+            cajas = [varilla_z(z0 + 0.05, z1 - 0.05, xc, y) for y in pasos(y0 + 0.1, y1 - 0.1, 0.25)]
+        nueva_varilla("varillas", cajas, i)
 
     # Una varilla sin anfitrión DENTRO de una columna (se ubica por el concreto que la contiene)
     x0, y0, z0, x1, y1, z1 = en_m(b.ids["columnas_pb"][4])

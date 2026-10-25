@@ -21,6 +21,7 @@ COLORES = {
     "OST_Doors": (130, 90, 60),
 }
 COLOR_OTRO = (180, 180, 180)
+BANDA_Z_PIES = 0.05
 FONDO = (255, 255, 255)
 LUZ = (0.35, -0.55, 0.76)  # dirección hacia el sol, fija en el mundo
 
@@ -29,6 +30,22 @@ _CARAS = [  # (índices de esquinas, normal)
     ((0, 4, 5, 1), (0, -1, 0)), ((2, 3, 7, 6), (0, 1, 0)),
     ((0, 2, 6, 4), (0, 0, -1)), ((1, 5, 7, 3), (0, 0, 1)),
 ]
+
+
+def _tapado(doc, vista, e):
+    """True si el acero obstruido queda dentro de un concreto visible (su anfitrión o el que lo contiene)."""
+    anf = doc._elementos.get(e._anfitrion) if e._anfitrion else None
+    if anf is not None:
+        return vista._es_visible(anf)
+    (x0, y0, z0), (x1, y1, z1) = e._cajas[0]
+    c = ((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
+    for o in doc._elementos.values():
+        if o is e or not o._cajas or hasattr(o, "IsUnobscuredInView") or not vista._es_visible(o):
+            continue
+        for (a0, b0, c0), (a1, b1, c1) in o._cajas:
+            if a0 <= c[0] <= a1 and b0 <= c[1] <= b1 and c0 <= c[2] <= c1:
+                return True
+    return False
 
 
 def _poligonos(doc, vista):
@@ -45,8 +62,14 @@ def _poligonos(doc, vista):
             continue
         clave = e.Category.BuiltInCategory.nombre if e.Category is not None else ""
         base = COLORES.get(clave, COLOR_OTRO)
-        # Acero "sin obstrucciones": Revit lo dibuja encima del concreto
-        encima = 1e9 if getattr(e, "IsUnobscuredInView", None) and e.IsUnobscuredInView(vista) else 0.0
+        # Acero "sin obstrucciones": Revit lo dibuja encima del concreto. Si está
+        # obstruido y su concreto ya está visible, queda tapado: no se dibuja.
+        encima = 0.0
+        if getattr(e, "IsUnobscuredInView", None):
+            if e.IsUnobscuredInView(vista):
+                encima = 1e9
+            elif _tapado(doc, vista, e):
+                continue
         for (x0, y0, z0), (x1, y1, z1) in e._cajas:
             esquinas = []
             for x in (x0, x1):
@@ -57,7 +80,9 @@ def _poligonos(doc, vista):
                                          dx * by.X + dy * by.Y + dz * by.Z,
                                          dx * bz.X + dy * bz.Y + dz * bz.Z))
             # Orden por caja (centro) y, dentro de la caja, solo caras de frente
-            prof = sum(c[2] for c in esquinas) / 8.0 + encima
+            # La cámara mira hacia abajo: entre cajas apiladas se dibuja primero la más
+            # baja (banda de su Z superior); en la misma banda, de lejos a cerca.
+            prof = (encima, math.floor(z1 / BANDA_Z_PIES), sum(c[2] for c in esquinas) / 8.0)
             for idx, n in _CARAS:
                 if n[0] * hacia_ojo[0] + n[1] * hacia_ojo[1] + n[2] * hacia_ojo[2] <= 1e-9:
                     continue  # cara de espaldas

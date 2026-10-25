@@ -45,7 +45,7 @@ BuiltInCategory = _enum("BuiltInCategory", [
     "OST_StructuralFoundation", "OST_StructuralColumns", "OST_StructuralFraming",
     "OST_Walls", "OST_Floors", "OST_Stairs", "OST_Rebar", "OST_GenericModel",
     "OST_Toposolid", "OST_Topography", "OST_Doors", "OST_Windows", "OST_Levels", "OST_Views",
-    "OST_Roofs", "OST_Ceilings", "OST_Railings", "OST_StairsRailing", "OST_Columns",
+    "OST_Roofs", "OST_Ramps", "OST_Ceilings", "OST_Railings", "OST_StairsRailing", "OST_Columns",
     "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections", "OST_AreaRein",
     "OST_PathRein", "OST_Furniture", "OST_Casework", "OST_PlumbingFixtures", "OST_LightingFixtures",
     "OST_SpecialityEquipment", "OST_Grids", "OST_FabricReinforcement", "OST_FabricAreas", "OST_Coupler",
@@ -234,7 +234,7 @@ class Element(object):
     Name = _PropiedadNombre()
 
     def __init__(self, doc, valor_id, nombre="", categoria=None, tipo_id=None, cajas=None,
-                 ocultable=True):
+                 ocultable=True, materiales=None):
         object.__setattr__(self, "_doc", doc)
         object.__setattr__(self, "_id", ElementId(valor_id))
         object.__setattr__(self, "_nombre", nombre)
@@ -242,6 +242,7 @@ class Element(object):
         object.__setattr__(self, "_tipo_id", tipo_id)
         object.__setattr__(self, "_cajas", list(cajas or []))  # [((x0,y0,z0),(x1,y1,z1)), ...] en pies
         object.__setattr__(self, "_ocultable", ocultable)
+        object.__setattr__(self, "_materiales", list(materiales or []))  # ids enteros de Material
 
     # Los elementos del modelo son de solo lectura
     def __setattr__(self, nombre, valor):
@@ -283,6 +284,9 @@ class Element(object):
     def get_Parameter(self, bip):
         return None
 
+    def GetMaterialIds(self, pintura):
+        return [ElementId(m) for m in self._materiales]
+
     def CanBeHidden(self, vista):
         return self._ocultable
 
@@ -290,7 +294,15 @@ class Element(object):
         return self._id.Value in vista._ocultos
 
 
+class Material(Element):
+    pass
+
+
 class ElementType(Element):
+    @property
+    def FamilyName(self):
+        return getattr(self, "_familia", "")
+
     def get_Parameter(self, bip):
         if bip is BuiltInParameter.SYMBOL_NAME_PARAM or bip is BuiltInParameter.ALL_MODEL_TYPE_NAME:
             return Parameter(self._nombre)

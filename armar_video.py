@@ -42,33 +42,53 @@ ROTULOS = True
 ROTULOS_ETAPA = {
     "cimentacion": "Cimentación",
     "dados": "Cimentación",
+    "mamposteria": "Cimiento de mampostería",
+    "cisterna": "Cisterna",
     "desplante": "Cimentación",
+    "firme": "Firme",
     "acero": "Acero de refuerzo",
     "columnas": "Castillos y columnas",
     "muros": "Muros",
     "trabes": "Trabes y cadenas",
+    "viguetas": "Vigueta y bovedilla",
+    "bovedillas": "Vigueta y bovedilla",
     "losas": "Losa",
     "escaleras": "Losa",
+    "rampas": "Rampas",
+    "tinaco": "Tinaco",
+    "exteriores": "Exteriores",
     "otros": "",
 }
 # Mientras aparece el acero de una etapa (antes de su concreto)
 ROTULOS_ARMADO = {
     "cimentacion": "Armado de cimentación",
     "dados": "Armado de cimentación",
+    "mamposteria": "Armado de cimentación",
+    "cisterna": "Armado de cisterna",
     "desplante": "Armado de cimentación",
+    "firme": "Armado de firme",
     "columnas": "Armado de castillos y columnas",
     "muros": "Armado de muros",
     "trabes": "Armado de trabes y cadenas",
+    "viguetas": "Armado de losa",
+    "bovedillas": "Armado de losa",
     "losas": "Armado de losa",
     "escaleras": "Armado de escalera",
+    "rampas": "Armado de rampas",
+    "tinaco": "Armado de base de tinaco",
+    "exteriores": "Armado de exteriores",
     "otros": "Armado",
 }
+# Etapas que muestran su propio rótulo en cualquier nivel (no "Planta alta"/"Azotea")
+ETAPAS_ROTULO_PROPIO = ("cisterna", "tinaco", "exteriores")
+# Etapas que forman la losa (la más alta se rotula "Azotea")
+ETAPAS_LOSA = ("viguetas", "bovedillas", "losas")
 ROTULO_PLANTA_ALTA = "Planta alta"   # cualquier etapa en niveles superiores
 ROTULO_AZOTEA = "Azotea"             # losa más alta y lo que esté encima
 ROTULO_ARMADO_PLANTA_ALTA = "Armado planta alta"
 ROTULO_ARMADO_AZOTEA = "Armado de azotea"
 ROTULO_FINAL = ""                    # texto durante el remate (vacío = sin rótulo)
-ROTULO_MIN_S = 0.5                   # un rótulo dura al menos esto (evita parpadeos)
+ROTULO_MIN_S = 0.4                   # un rótulo dura al menos esto (evita parpadeos)
 ROTULO_FUNDIDO_S = 0.3
 ROTULO_Y = 0.80                      # centro vertical (fracción del alto), fuera de la zona de botones
 ROTULO_TAM = 0.024                   # tamaño de letra (fracción del alto: 46 px en 1920)
@@ -182,7 +202,8 @@ def rotulos_por_cuadro(guion, n_entrada):
     if not guion or not ROTULOS:
         return [""] * n_entrada
     cuadros = guion["cuadros"]
-    niveles_losa = [c["nivel"] for c in cuadros if c.get("etapa") == "losas" and c.get("nivel") is not None]
+    niveles_losa = [c["nivel"] for c in cuadros
+                    if c.get("etapa") in ETAPAS_LOSA and c.get("nivel") is not None]
     nivel_azotea = max(niveles_losa) if niveles_losa else None
 
     def texto(c):
@@ -193,10 +214,10 @@ def rotulos_por_cuadro(guion, n_entrada):
         etapa, nivel, armado = c.get("etapa"), c.get("nivel"), c.get("armado", False)
         if etapa is None:
             return ""
-        if nivel is None or nivel == 0:
+        if nivel is None or nivel == 0 or etapa in ETAPAS_ROTULO_PROPIO:
             return (ROTULOS_ARMADO if armado else ROTULOS_ETAPA).get(etapa, "")
         if nivel_azotea is not None and nivel_azotea > 0 and (
-                nivel > nivel_azotea or (nivel == nivel_azotea and etapa == "losas")):
+                nivel > nivel_azotea or (nivel == nivel_azotea and etapa in ETAPAS_LOSA)):
             return ROTULO_ARMADO_AZOTEA if armado else ROTULO_AZOTEA
         return ROTULO_ARMADO_PLANTA_ALTA if armado else ROTULO_PLANTA_ALTA
 

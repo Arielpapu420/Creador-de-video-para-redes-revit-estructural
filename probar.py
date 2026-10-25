@@ -51,12 +51,22 @@ def prueba(fn):
 # -----------------------------------------------------------------------------
 
 ROLES_ACERO = {"varillas", "varillas_area", "mallas", "varillas_contenidas", "varillas_sueltas"}
-ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "tipos"} | ROLES_ACERO
+ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "tipos", "materiales"} | ROLES_ACERO
 CADENA_ORDEN = [
-    ["corridos"], ["dados"], ["desplante"], ["columnas_pb", "castillos_pb"], ["muros_pb"],
-    ["trabes_pb"], ["losas_pb"], ["escaleras"], ["columnas_pa", "castillos_pa"], ["muros_pa"],
-    ["trabes_pa"], ["losas_pa"], ["pretiles"],
+    ["corridos"], ["dados"], ["mamposteria"], ["cisterna"], ["desplante"], ["firme"],
+    ["columnas_pb", "castillos_pb"], ["muros_pb"], ["trabes_pb"], ["viguetas"], ["bovedillas"],
+    ["losas_maciza", "losas_compresion"], ["escaleras"], ["columnas_pa", "castillos_pa"], ["muros_pa"],
+    ["trabes_pa"], ["losas_pa"], ["pretiles"], ["tinaco"], ["exteriores"],
 ]
+# Etapa que debe asignar el nodo a cada rol del modelo sintético
+ETAPA_ESPERADA = {
+    "corridos": "cimentacion", "dados": "dados", "mamposteria": "mamposteria", "cisterna": "cisterna",
+    "desplante": "desplante", "firme": "firme", "columnas_pb": "columnas", "castillos_pb": "columnas",
+    "muros_pb": "muros", "trabes_pb": "trabes", "viguetas": "viguetas", "bovedillas": "bovedillas",
+    "losas_maciza": "losas", "losas_compresion": "losas", "escaleras": "escaleras",
+    "columnas_pa": "columnas", "castillos_pa": "columnas", "muros_pa": "muros", "trabes_pa": "trabes",
+    "losas_pa": "losas", "pretiles": "muros", "tinaco": "tinaco", "exteriores": "exteriores",
+}
 
 
 def correr(carpeta, doc=None, acero=False, fps=15, duracion=30, grados=180, fallos=None,
@@ -211,7 +221,7 @@ def secuencia_de_obra(tmp):
         fb = [primera[i] for i in ids_rol(doc, *b)]
         assert max(fa) <= min(fb), "%s debe terminar antes de que empiece %s" % (a, b)
     # Crecimiento gradual, no de golpe
-    for rol in ("corridos", "muros_pb", "muros_pa", "trabes_pb"):
+    for rol in ("dados", "muros_pb", "muros_pa", "trabes_pb", "viguetas"):
         cuadros = set(primera[i] for i in ids_rol(doc, rol))
         assert len(cuadros) >= 4, "%s aparece de golpe (%d cuadros distintos)" % (rol, len(cuadros))
 
@@ -275,6 +285,33 @@ def transacciones(tmp):
 
 
 @prueba
+def clasificacion_de_detalles(tmp):
+    """Cada rol del modelo cae en su etapa: piedra por material, viguetas por tamaño, etc."""
+    doc, out, esp = correr(os.path.join(tmp, "clasificacion"), acero=True, fps=2, duracion=4,
+                           exportador=simulador.exportador_vacio)
+    base = next(e for e in doc._elementos.values() if isinstance(e, View3D) and e._nombre == "{3D}")
+    inf = esp["Informe"]()
+    niveles = esp["leer_niveles"](doc)
+    piezas = esp["ordenar_piezas"](esp["recoger_piezas"](doc, base, True, inf), niveles, inf)
+    etapa = {p.clave: (p.etapa, p.nivel) for p in piezas}
+    for rol, esperada in ETAPA_ESPERADA.items():
+        for i in doc._ids_por_rol[rol]:
+            assert i in etapa, "%s (%d) no entró a la secuencia" % (rol, i)
+            assert etapa[i][0] == esperada, "%s cayó en %s, se esperaba %s" % (rol, etapa[i][0], esperada)
+    assert all(etapa[i][1] == len(niveles) for i in ids_rol(doc, "exteriores")), "exteriores al final"
+    assert not (ids_rol(doc, "genericos") & set(etapa)), "los genéricos sin regla quedan como base"
+    assert not [p for p in piezas if p.etapa == "otros"]
+    # El tipo de la mampostería NO dice piedra: se reconoció por el material
+    muro = next(p for p in piezas if p.clave == doc._ids_por_rol["mamposteria"][0])
+    assert "piedra" not in muro.tipo.lower() and "Piedra braza" in muro.materiales
+    # Las viguetas tampoco dicen vigueta: se reconocieron por tamaño
+    vig = next(p for p in piezas if p.clave == doc._ids_por_rol["viguetas"][0])
+    assert "vigueta" not in vig.texto
+    rep = leer(out)
+    assert "TIPOS DE REVIT POR ETAPA" in rep and "Muro estructural 50 cm  · materiales: Piedra braza" in rep
+
+
+@prueba
 def armado_antes_del_concreto(tmp):
     doc, out, _ = correr(os.path.join(tmp, "acero"), acero=True, exportador=simulador.exportador_vacio)
     est = simulador.estado
@@ -309,12 +346,28 @@ def armado_antes_del_concreto(tmp):
     for i in ids_rol(doc, "varillas_contenidas"):
         assert rango_concreto(k - 1)[1] <= primera[i] <= rango_concreto(k)[0]
 
-    # Todo el acero queda "sin obstrucciones" y "como sólido" SOLO en la vista de video
+    # El acero queda "sin obstrucciones" y "como sólido" SOLO en la vista de video,
+    # y vuelve a quedar obstruido (tapado) cuando aparece su concreto
     vista_video = ex[0]["vista"]
-    assert all(acero <= set(e["sin_obstruccion"]) for e in ex)
     assert {a[1] for a in est.ajustes_acero} == {vista_video}
     assert {a[2] for a in est.ajustes_acero} == {"SetUnobscuredInView", "SetSolidInView"}
-    assert len(est.ajustes_acero) == 2 * len(acero)
+    contenida = ids_rol(doc, "varillas_contenidas")
+    cubre = {i: doc._elementos[i]._anfitrion for i in acero if doc._elementos[i]._anfitrion}
+    for i in contenida:
+        cubre[i] = doc._ids_por_rol["columnas_pb"][4]
+    tapados = 0
+    for e in ex:
+        vis, libres = set(e["visibles"]), set(e["sin_obstruccion"])
+        for i in acero & vis:
+            concreto = cubre.get(i)
+            if concreto is not None and concreto in vis:
+                assert i not in libres, "el acero %d debe quedar tapado por su concreto" % i
+                tapados += 1
+            else:
+                assert i in libres, "el acero %d debe verse mientras su concreto no aparece" % i
+    assert tapados > 0
+    final = ex[-1]
+    assert set(final["sin_obstruccion"]) == ids_rol(doc, "varillas_sueltas"), "solo el acero sin concreto queda libre"
     # Una vez colocado, el armado sigue visible hasta el final
     previo = set()
     for e in ex:
@@ -322,6 +375,21 @@ def armado_antes_del_concreto(tmp):
         assert previo <= actual
         previo = actual
     assert previo == acero
+
+    # Reanudar con acero: el estado tapado/destapado es el mismo que sin cortes
+    ref = {numero_cuadro(e["ruta"]): (e["visibles"], e["sin_obstruccion"]) for e in ex}
+    carpeta_r = os.path.join(tmp, "acero_reanudar")
+    try:
+        correr(carpeta_r, acero=True, fallos={200: "caida"}, exportador=simulador.exportador_vacio)
+        raise AssertionError("la caída simulada debería interrumpir el nodo")
+    except simulador.CaidaDeRevit:
+        pass
+    correr(carpeta_r, acero=True, exportador=simulador.exportador_vacio)
+    reanudados = {numero_cuadro(e["ruta"]): (e["visibles"], e["sin_obstruccion"])
+                  for e in simulador.estado.exportes}
+    assert min(reanudados) == 200 and len(reanudados) == 251
+    for n, estado_cuadro in reanudados.items():
+        assert estado_cuadro == ref[n], "el cuadro %d reanudado difiere en acero visible/tapado" % n
 
     # Una segunda corrida sin acero sobre la misma vista vuelve a ocultar sus categorías
     correr(os.path.join(tmp, "acero_luego_sin"), doc=doc, acero=False, fps=5, duracion=6)
@@ -440,8 +508,9 @@ def rotulos_y_orden_de_archivos(tmp):
     for t in textos:
         if t and (not secuencia or secuencia[-1] != t):
             secuencia.append(t)
-    esperado = ["Cimentación", "Castillos y columnas", "Muros", "Trabes y cadenas", "Losa",
-                "Planta alta", "Azotea"]
+    esperado = ["Cimentación", "Cimiento de mampostería", "Cisterna", "Cimentación", "Firme",
+                "Castillos y columnas", "Muros", "Trabes y cadenas", "Vigueta y bovedilla", "Losa",
+                "Planta alta", "Azotea", "Tinaco", "Exteriores"]
     assert secuencia == esperado, secuencia
     assert all(t == "" for t in textos[:22]) and all(t == "" for t in textos[361:])
     # Con acero: cada etapa con armado muestra primero su rótulo de armado
@@ -452,10 +521,12 @@ def rotulos_y_orden_de_archivos(tmp):
     for t in textos:
         if t and (not secuencia or secuencia[-1] != t):
             secuencia.append(t)
-    esperado = ["Armado de cimentación", "Cimentación"] * 3 + [
-        "Armado de castillos y columnas", "Castillos y columnas", "Muros", "Armado de trabes y cadenas",
-        "Trabes y cadenas", "Armado de losa", "Losa", "Armado planta alta", "Planta alta",
-        "Armado planta alta", "Planta alta", "Armado de azotea", "Azotea"]
+    esperado = ["Armado de cimentación", "Cimentación"] * 2 + [
+        "Cimiento de mampostería", "Armado de cisterna", "Cisterna", "Armado de cimentación", "Cimentación",
+        "Firme", "Armado de castillos y columnas", "Castillos y columnas", "Muros", "Armado de trabes y cadenas",
+        "Trabes y cadenas", "Vigueta y bovedilla", "Armado de losa", "Losa", "Armado planta alta",
+        "Planta alta", "Armado planta alta", "Planta alta", "Armado de azotea", "Azotea", "Tinaco",
+        "Exteriores"]
     assert secuencia == esperado, secuencia
     # Orden numérico sin depender del sufijo de Revit, con un duplicado más reciente
     d = os.path.join(tmp, "nombres")
@@ -489,6 +560,7 @@ def main():
     secuencia_de_obra(tmp)
     camara_y_encuadre(tmp)
     transacciones(tmp)
+    clasificacion_de_detalles(tmp)
     armado_antes_del_concreto(tmp)
     reanudable_tras_cierre_de_revit(tmp)
     error_en_un_cuadro_queda_en_informe(tmp)
