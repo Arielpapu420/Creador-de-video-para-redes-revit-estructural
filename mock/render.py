@@ -14,7 +14,8 @@ COLORES = {
     "OST_Walls": (206, 196, 180),
     "OST_Floors": (178, 182, 188),
     "OST_Stairs": (160, 150, 140),
-    "OST_Rebar": (196, 70, 50),
+    "OST_Rebar": (200, 60, 40),
+    "OST_FabricReinforcement": (210, 90, 40),
     "OST_GenericModel": (196, 196, 190),
     "OST_Toposolid": (150, 170, 120),
     "OST_Doors": (130, 90, 60),
@@ -44,6 +45,8 @@ def _poligonos(doc, vista):
             continue
         clave = e.Category.BuiltInCategory.nombre if e.Category is not None else ""
         base = COLORES.get(clave, COLOR_OTRO)
+        # Acero "sin obstrucciones": Revit lo dibuja encima del concreto
+        encima = 1e9 if getattr(e, "IsUnobscuredInView", None) and e.IsUnobscuredInView(vista) else 0.0
         for (x0, y0, z0), (x1, y1, z1) in e._cajas:
             esquinas = []
             for x in (x0, x1):
@@ -54,7 +57,7 @@ def _poligonos(doc, vista):
                                          dx * by.X + dy * by.Y + dz * by.Z,
                                          dx * bz.X + dy * bz.Y + dz * bz.Z))
             # Orden por caja (centro) y, dentro de la caja, solo caras de frente
-            prof = sum(c[2] for c in esquinas) / 8.0
+            prof = sum(c[2] for c in esquinas) / 8.0 + encima
             for idx, n in _CARAS:
                 if n[0] * hacia_ojo[0] + n[1] * hacia_ojo[1] + n[2] * hacia_ojo[2] <= 1e-9:
                     continue  # cara de espaldas

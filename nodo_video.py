@@ -13,7 +13,7 @@
 #    IN[2]  Cuadros por segundo de exportación (número, 15 por defecto)
 #    IN[3]  Duración del video en segundos (número, 30 por defecto)
 #    IN[4]  Grados de giro de la cámara (número, 180 por defecto)
-#    IN[5]  Incluir acero de refuerzo (booleano, False por defecto)
+#    IN[5]  Incluir acero de refuerzo (booleano, True por defecto)
 #  Salida:
 #    OUT    Ruta de informe_video.txt
 #
@@ -37,7 +37,7 @@ from System.Collections.Generic import List
 from Autodesk.Revit.DB import (
     BuiltInCategory, BuiltInParameter, Category, Element, ElementId,
     ExportRange, FilteredElementCollector, FitDirectionType, ImageExportOptions,
-    ImageFileType, ImageResolution, Level, View3D, ViewDuplicateOption,
+    ImageFileType, ImageResolution, Level, View3D, ViewDetailLevel, ViewDuplicateOption,
     ViewOrientation3D, XYZ, ZoomFitType,
 )
 from RevitServices.Persistence import DocumentManager
@@ -67,6 +67,7 @@ VISTA_BASE_DEFECTO = "{3D}"
 FPS_DEFECTO = 15
 DURACION_DEFECTO = 30.0
 GRADOS_DEFECTO = 180.0
+ACERO_DEFECTO = True
 
 # Guion, como fracción de la duración (para 30 s: 1.5 s y 24 s)
 FRACCION_INICIO_OBRA = 1.5 / 30.0  # antes: solo terreno
@@ -85,9 +86,21 @@ BANDA_Z_PIES = 0.5                # dentro de una etapa, elementos en la misma b
 DIRECCION_BARRIDO_GRADOS = 45.0   # dirección del barrido en planta (0 = de -X a +X)
 TOLERANCIA_NIVEL_PIES = 0.1       # Z inferior + tolerancia >= elevación del nivel
 TOLERANCIA_DESPLANTE_PIES = 1.0   # una viga es "de desplante" si su Z inferior <= nivel + esto
-# Tiempo relativo por elemento (1.0 si la categoría no aparece). Una losa es un
-# evento grande con pocos elementos: pesa más para que se alcance a ver.
-PESOS_CATEGORIA = {"OST_Rebar": 0.25, "OST_Floors": 4.0, "OST_Stairs": 2.0}
+# Tiempo relativo por elemento de concreto (1.0 si la categoría no aparece). Una losa
+# es un evento grande con pocos elementos: pesa más para que se alcance a ver.
+PESOS_CATEGORIA = {"OST_Floors": 4.0, "OST_Stairs": 2.0}
+
+# Armado: en cada etapa aparece primero TODO el acero y después el concreto.
+# El tiempo del armado de una etapa = esta fracción del tiempo de su concreto,
+# repartido entre sus varillas (así no importa si hay 10 o 2000 varillas).
+PESO_ARMADO_RELATIVO = 0.8
+PESO_ACERO_SUELTO = 0.25      # por pieza, para acero sin concreto asociado
+# Cada grupo (nivel + etapa + armado/concreto) dura al menos esto en el video,
+# para que una losa o una malla con pocos elementos se alcance a ver.
+MIN_SEG_GRUPO = 0.7
+VER_ACERO_SIN_OBSTRUCCION = True  # "Ver sin obstrucciones" en la vista de video
+VER_ACERO_COMO_SOLIDO = True      # "Ver como sólido" en la vista de video
+NIVEL_DETALLE_ALTO = True         # nivel de detalle Alto en la vista de video
 
 # Exportación
 MAX_ERRORES_SEGUIDOS = 5
@@ -101,16 +114,25 @@ CATEGORIAS_OBRA = [
     ("OST_Floors", "Suelos"),
     ("OST_Stairs", "Escaleras"),
 ]
-CATEGORIA_ACERO = ("OST_Rebar", "Armadura estructural")
+# Acero de refuerzo. OST_Rebar incluye varillas sueltas y las barras de los refuerzos
+# de área y de camino (RebarInSystem); OST_FabricReinforcement son las hojas de malla.
+CATEGORIAS_ACERO = [
+    ("OST_Rebar", "Armadura estructural"),
+    ("OST_FabricReinforcement", "Malla electrosoldada"),
+    ("OST_Coupler", "Acopladores"),
+]
+CLAVES_ACERO = set(c for c, _ in CATEGORIAS_ACERO)
 
 # Categorías que se ocultan siempre en la vista de video (solo ajuste de vista),
 # para que nada fuera de la secuencia aparezca "construido" desde el inicio.
-# Si no se incluye el acero, también se oculta OST_Rebar.
+# Si no se incluye el acero, también se ocultan las CATEGORIAS_ACERO.
+# Refuerzo de área/camino y áreas de malla son solo contornos: sus barras y hojas
+# (RebarInSystem, FabricSheet) sí entran en la secuencia.
 # Modelos genéricos y terreno NO se tocan: quedan visibles como base.
 CATEGORIAS_OCULTAS_SIEMPRE = [
     "OST_Doors", "OST_Windows", "OST_Roofs", "OST_Ceilings", "OST_Railings", "OST_StairsRailing",
     "OST_Columns", "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections",
-    "OST_AreaRein", "OST_PathRein", "OST_Furniture", "OST_Casework", "OST_PlumbingFixtures",
+    "OST_AreaRein", "OST_PathRein", "OST_FabricAreas", "OST_Furniture", "OST_Casework", "OST_PlumbingFixtures",
     "OST_LightingFixtures", "OST_SpecialityEquipment", "OST_Levels", "OST_Grids",
 ]
 
@@ -136,8 +158,9 @@ REGLAS_ETAPA = [
     (80,     "escaleras",   "OST_Stairs",                None),
 ]
 ETAPA_OTROS = (90, "otros")          # si ninguna fila cumple
-ETAPA_ACERO_SUELTO = (35, "acero")   # varillas sin anfitrión recogido
-# Las varillas con anfitrión aparecen justo antes de su anfitrión.
+ETAPA_ACERO_SUELTO = (35, "acero")   # acero sin anfitrión ni concreto que lo contenga
+# El acero toma la etapa de su anfitrión (o del concreto que lo contiene) y
+# aparece antes que todo el concreto de esa etapa.
 
 # Palabras clave en el nombre del TIPO (minúsculas, sin importar acentos)
 PALABRAS_AISLADO = ("dado", "zapata aislada", "pila", "pilote", "candelero")
@@ -251,6 +274,8 @@ class Pieza(object):
         self.nivel = 0
         self.orden = 0
         self.etapa = ""
+        self.acero = cat in CLAVES_ACERO
+        self.armado = False  # True si es acero que aparece antes de su concreto
         self.peso = PESOS_CATEGORIA.get(cat, 1.0)
         self.clave_orden = None
 
@@ -264,6 +289,7 @@ class Cuadro(object):
         self.azimut = azimut
         self.etapa = None
         self.nivel = None
+        self.armado = False
 
 
 class Informe(object):
@@ -368,7 +394,7 @@ def leer_entradas(entradas):
     c.fps = max(1, int(round(float(_entrada(entradas, 2, FPS_DEFECTO)))))
     c.duracion = float(_entrada(entradas, 3, DURACION_DEFECTO))
     c.grados = float(_entrada(entradas, 4, GRADOS_DEFECTO))
-    c.acero = _a_bool(_entrada(entradas, 5, False))
+    c.acero = _a_bool(_entrada(entradas, 5, ACERO_DEFECTO))
     if c.duracion <= 0:
         raise ValueError("La duración debe ser mayor que cero.")
     return c
@@ -411,10 +437,15 @@ def caja_de(elemento):
 
 
 def anfitrion_de(elemento):
+    """Id entero del anfitrión del acero: GetHostId() (varillas) o HostId (mallas)."""
+    hid = None
     try:
         hid = elemento.GetHostId()
     except Exception:
-        return None
+        try:
+            hid = elemento.HostId
+        except Exception:
+            return None
     if hid is None:
         return None
     k = id_entero(hid)
@@ -424,11 +455,15 @@ def anfitrion_de(elemento):
 def recoger_piezas(doc, vista_base, incluir_acero, inf):
     categorias = list(CATEGORIAS_OBRA)
     if incluir_acero:
-        categorias.append(CATEGORIA_ACERO)
+        categorias += CATEGORIAS_ACERO
     vistos = set()
     piezas = []
     for cat, etiqueta in categorias:
-        bic = getattr(BuiltInCategory, cat)
+        try:
+            bic = getattr(BuiltInCategory, cat)
+        except AttributeError:
+            inf.nota("La categoría %s no existe en esta versión de Revit; se omite." % cat)
+            continue
         elementos = (FilteredElementCollector(doc, vista_base.Id)
                      .OfCategory(bic).WhereElementIsNotElementType().ToElements())
         for e in elementos:
@@ -447,7 +482,7 @@ def recoger_piezas(doc, vista_base, incluir_acero, inf):
             if caja is None:
                 inf.omitidos.append("%d (%s): sin BoundingBox" % (k, etiqueta))
                 continue
-            anf = anfitrion_de(e) if cat == "OST_Rebar" else None
+            anf = anfitrion_de(e) if cat in CLAVES_ACERO else None
             piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e), anf))
     return piezas
 
@@ -490,11 +525,24 @@ CONDICIONES = {
 }
 
 
-def _clave_base(p):
+def _clave_base(p, sub):
+    """(nivel, orden de etapa, 0 armado / 1 concreto, banda de Z, barrido en planta, id)."""
     a = math.radians(DIRECCION_BARRIDO_GRADOS)
     barrido = p.cx * math.cos(a) + p.cy * math.sin(a)
     banda = int(math.floor(p.zmin / BANDA_Z_PIES + 1e-9))
-    return (p.nivel, p.orden, banda, round(barrido, 3))
+    return (p.nivel, p.orden, sub, banda, round(barrido, 3), p.clave)
+
+
+def _contenedor(p, concretos):
+    """Concreto más chico cuya caja contiene el centro del acero (si no tiene anfitrión)."""
+    cz = 0.5 * (p.zmin + p.zmax)
+    mejor, vol_mejor = None, None
+    for c in concretos:
+        if c.xmin <= p.cx <= c.xmax and c.ymin <= p.cy <= c.ymax and c.zmin <= cz <= c.zmax:
+            vol = (c.xmax - c.xmin) * (c.ymax - c.ymin) * (c.zmax - c.zmin)
+            if mejor is None or vol < vol_mejor:
+                mejor, vol_mejor = c, vol
+    return mejor
 
 
 def ordenar_piezas(piezas, niveles, inf):
@@ -509,29 +557,51 @@ def ordenar_piezas(piezas, niveles, inf):
     ctx = {"niveles": niveles, "min_armazon": min_armazon}
 
     por_clave = {}
-    for p in piezas:
-        if p.cat == "OST_Rebar":
-            continue
+    concretos = [p for p in piezas if not p.acero]
+    for p in concretos:
         p.orden, p.etapa = ETAPA_OTROS
         for orden, etapa, cat, cond in REGLAS_ETAPA:
             if cat == p.cat and CONDICIONES[cond](p, ctx):
                 p.orden, p.etapa = orden, etapa
                 break
-        p.clave_orden = _clave_base(p) + (1, 0, 0.0, p.clave)
+        p.clave_orden = _clave_base(p, 1)
         por_clave[p.clave] = p
 
+    # Acero: toma nivel y etapa de su anfitrión (o del concreto que lo contiene)
+    # y va en el grupo "armado" (sub = 0), antes de todo el concreto de la etapa.
+    sin_anfitrion = 0
     for p in piezas:
-        if p.cat != "OST_Rebar":
+        if not p.acero:
             continue
         anf = por_clave.get(p.anfitrion)
+        if anf is None:
+            anf = _contenedor(p, concretos)
+            sin_anfitrion += 1
         if anf is not None:
-            # La varilla aparece justo antes de su anfitrión
-            p.nivel, p.orden, p.etapa = anf.nivel, anf.orden, anf.etapa
-            propia = _clave_base(p)
-            p.clave_orden = _clave_base(anf) + (0, propia[2], propia[3], p.clave)
+            p.nivel, p.orden, p.etapa, p.armado = anf.nivel, anf.orden, anf.etapa, True
+            p.clave_orden = _clave_base(p, 0)
         else:
             p.orden, p.etapa = ETAPA_ACERO_SUELTO
-            p.clave_orden = _clave_base(p) + (1, 0, 0.0, p.clave)
+            p.peso = PESO_ACERO_SUELTO
+            p.clave_orden = _clave_base(p, 1)
+    if sin_anfitrion:
+        inf.nota("%d piezas de acero sin anfitrión en la secuencia: se ubicaron por el concreto "
+                 "que las contiene o como etapa 'acero'." % sin_anfitrion)
+
+    # Tiempo del armado de cada etapa: fracción del tiempo de su concreto
+    grupos = {}
+    for p in piezas:
+        g = grupos.setdefault((p.nivel, p.orden), [0.0, []])
+        if p.armado:
+            g[1].append(p)
+        else:
+            g[0] += p.peso
+    for peso_concreto, armado in grupos.values():
+        if armado:
+            total = PESO_ARMADO_RELATIVO * peso_concreto if peso_concreto > 0 else \
+                PESO_ACERO_SUELTO * len(armado)
+            for p in armado:
+                p.peso = total / len(armado)
 
     piezas.sort(key=lambda p: p.clave_orden)
 
@@ -541,10 +611,35 @@ def ordenar_piezas(piezas, niveles, inf):
     return piezas
 
 
+def asegurar_minimo(piezas, fraccion):
+    """Escala los grupos cortos para que cada uno ocupe al menos 'fraccion' del tiempo de obra."""
+    grupos = {}
+    for p in piezas:
+        if (p.orden, p.etapa) != ETAPA_ACERO_SUELTO:
+            grupos.setdefault((p.nivel, p.orden, p.armado), []).append(p)
+    if not grupos:
+        return
+    fraccion = min(fraccion, 0.9 / len(grupos))
+    for _ in range(20):
+        total = sum(p.peso for p in piezas)
+        cambio = False
+        for g in grupos.values():
+            peso = sum(p.peso for p in g)
+            if 0 < peso < fraccion * total * 0.999:
+                k = fraccion * total / peso
+                for p in g:
+                    p.peso *= k
+                cambio = True
+        if not cambio:
+            break
+
+
 def construir_guion(piezas, cfg):
     n = int(round(cfg.duracion * cfg.fps))
     t_ini = FRACCION_INICIO_OBRA * cfg.duracion
     t_fin = FRACCION_FIN_OBRA * cfg.duracion
+    if t_fin > t_ini:
+        asegurar_minimo(piezas, MIN_SEG_GRUPO / (t_fin - t_ini))
     acumulado = []
     suma = 0.0
     for p in piezas:
@@ -567,7 +662,7 @@ def construir_guion(piezas, cfg):
         c = Cuadro(i + 1, t, fase, visibles, AZIMUT_INICIAL_GRADOS + cfg.grados * u)
         if visibles > 0:
             ultima = piezas[visibles - 1]
-            c.etapa, c.nivel = ultima.etapa, ultima.nivel
+            c.etapa, c.nivel, c.armado = ultima.etapa, ultima.nivel, ultima.armado
         cuadros.append(c)
     return cuadros
 
@@ -651,6 +746,35 @@ def _fijar_categoria(doc, vista, nombre, oculta, inf):
     return False
 
 
+def mostrar_acero(vista, piezas_acero, inf):
+    """Activa "Ver sin obstrucciones" y "Ver como sólido" SOLO en la vista de video.
+
+    Es un ajuste gráfico por vista que Revit guarda en cada varilla/malla; no cambia
+    su geometría ni cómo se ve en otras vistas. Sin él, el acero queda oculto
+    dentro del concreto en una vista 3D.
+    """
+    sin_obs = solido = 0
+    fallas = []
+    for p in piezas_acero:
+        e = p.elemento
+        if VER_ACERO_SIN_OBSTRUCCION:
+            try:
+                e.SetUnobscuredInView(vista, True)
+                sin_obs += 1
+            except Exception as ex:
+                fallas.append("%d SetUnobscuredInView: %s" % (p.clave, ex))
+        if VER_ACERO_COMO_SOLIDO:
+            try:
+                e.SetSolidInView(vista, True)
+                solido += 1
+            except Exception as ex:
+                fallas.append("%d SetSolidInView: %s" % (p.clave, ex))
+    inf.nota("Acero en la vista de video: %d de %d sin obstrucciones, %d como sólido."
+             % (sin_obs, len(piezas_acero), solido))
+    if fallas:
+        inf.nota("Acero con ajuste de vista fallido (%d), primeros: %s" % (len(fallas), "; ".join(fallas[:5])))
+
+
 def preparar_vista(doc, vista_base, piezas, incluir_acero, inf):
     """Crea o reutiliza VIDEO OBRA y deja ocultas todas las piezas de la secuencia."""
     vista = buscar_vista_3d(doc, NOMBRE_VISTA_VIDEO)
@@ -676,11 +800,18 @@ def preparar_vista(doc, vista_base, piezas, incluir_acero, inf):
         vista.CropBoxActive = True
         vista.CropBoxVisible = False
 
+        if NIVEL_DETALLE_ALTO:
+            try:
+                vista.DetailLevel = ViewDetailLevel.Fine
+            except Exception:
+                inf.nota("No se pudo poner el nivel de detalle Alto (¿plantilla de vista?).")
+
         ocultas = list(CATEGORIAS_OCULTAS_SIEMPRE)
-        if incluir_acero:
-            _fijar_categoria(doc, vista, CATEGORIA_ACERO[0], False, inf)  # por si una corrida previa la ocultó
-        else:
-            ocultas.append(CATEGORIA_ACERO[0])
+        for cat, _ in CATEGORIAS_ACERO:
+            if incluir_acero:
+                _fijar_categoria(doc, vista, cat, False, inf)  # por si una corrida previa la ocultó
+            else:
+                ocultas.append(cat)
         hechas = [n for n in ocultas if _fijar_categoria(doc, vista, n, True, inf)]
         inf.nota("Categorías ocultas en la vista de video: %s" % (", ".join(hechas) or "ninguna"))
 
@@ -691,6 +822,8 @@ def preparar_vista(doc, vista_base, piezas, incluir_acero, inf):
             else:
                 inf.omitidos.append("%d (%s): no se puede ocultar, queda siempre visible"
                                     % (p.clave, p.etiqueta_cat))
+        if incluir_acero:
+            mostrar_acero(vista, [p for p in ocultables if p.acero], inf)
         a_ocultar = [p.eid for p in ocultables if not p.elemento.IsHidden(vista)]
         if a_ocultar:
             vista.HideElements(lista_ids(a_ocultar))
@@ -738,7 +871,8 @@ def escribir_guion(ruta, cfg, niveles, piezas, cuadros):
                     for i, (e, n) in enumerate(niveles)],
         "piezas": len(piezas),
         "cuadros": [{"n": c.n, "t": round(c.t, 4), "fase": c.fase, "visibles": c.visibles,
-                     "etapa": c.etapa, "nivel": c.nivel, "azimut": round(c.azimut, 4)}
+                     "etapa": c.etapa, "nivel": c.nivel, "armado": c.armado,
+                     "azimut": round(c.azimut, 4)}
                     for c in cuadros],
     }
     with open(ruta, "w", encoding="utf-8") as f:

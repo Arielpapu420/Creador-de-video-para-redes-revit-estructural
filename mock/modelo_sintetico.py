@@ -12,12 +12,15 @@ Contenido:
   - Columnas en cruces y castillos a media crujía (Pilares estructurales).
   - Muros de carga, trabes/cadenas de cerramiento y losas en planta baja y planta alta.
   - Escalera, pretiles de azotea, una puerta y un muro oculto en la vista base.
-  - Varillas (Rebar) en columnas, cadenas y trabes, con su anfitrión.
+  - Acero con su anfitrión: varillas y estribos en columnas, castillos, cadenas y trabes;
+    parrillas en cimientos corridos y dados; refuerzo de área (RebarInSystem) en la losa de
+    planta baja; malla electrosoldada (FabricSheet) en la losa de azotea. Además, una varilla
+    sin anfitrión dentro de una columna y otra fuera de todo concreto.
 """
 from Autodesk.Revit.DB import (
     BuiltInCategory, Category, Document, FamilyInstance, FamilySymbol, Floor, FloorType,
-    Level, Rebar, RebarBarType, Stairs, StairsType, Toposolid, View3D, Wall, WallFoundation,
-    WallFoundationType, WallType,
+    FabricSheet, Level, Rebar, RebarBarType, RebarInSystem, Stairs, StairsType, Toposolid, View3D, Wall,
+    WallFoundation, WallFoundationType, WallType,
 )
 
 M = 1.0 / 0.3048  # metros -> pies
@@ -64,6 +67,7 @@ class _Constructor(object):
                 ("OST_StructuralFraming", "Armazón estructural"),
                 ("OST_Walls", "Muros"), ("OST_Floors", "Suelos"), ("OST_Stairs", "Escaleras"),
                 ("OST_Rebar", "Armadura estructural"), ("OST_GenericModel", "Modelos genéricos"),
+                ("OST_FabricReinforcement", "Malla electrosoldada"),
                 ("OST_Toposolid", "Toposólido"), ("OST_Doors", "Puertas"), ("OST_Windows", "Ventanas")]):
             cat = Category(getattr(BuiltInCategory, clave), nombre, -2000000 - i)
             self.cats[clave] = cat
@@ -99,6 +103,7 @@ def crear_documento():
     t_losa = b.tipo(FloorType, "Losa maciza 10 cm", "OST_Floors")
     t_escalera = b.tipo(StairsType, "Escalera de concreto", "OST_Stairs")
     t_varilla = b.tipo(RebarBarType, "Varilla 3/8", "OST_Rebar")
+    t_malla = b.tipo(FamilySymbol, "Malla 6x6-10/10", "OST_FabricReinforcement")
     t_generico = b.tipo(FamilySymbol, "Genérico", "OST_GenericModel")
     t_puerta = b.tipo(FamilySymbol, "Puerta 90x210", "OST_Doors")
 
@@ -171,23 +176,102 @@ def crear_documento():
     oculto = b.nuevo(Wall, "muro_oculto_base", "Muro provisional", "OST_Walls", t_muro,
                      [_caja(10.0, 2.0, 0.0, 10.15, 6.0, 2.0)])
 
-    # Varillas: 4 por columna, 2 por cadena/trabe
-    def varillas_columna(col):
-        (x0, y0, z0), (x1, y1, z1) = col._cajas[0]
-        r, d = 0.04 * M, 0.012 * M
-        cajas = [((x - d, y - d, z0), (x + d, y + d, z1))
-                 for x in (x0 + r, x1 - r) for y in (y0 + r, y1 - r)]
-        b.nuevo(Rebar, "varillas", "", "OST_Rebar", t_varilla, cajas, anfitrion=col.Id.Value)
+    # ---------------- Acero de refuerzo ----------------
+    E = doc._elementos
+    D = 0.006  # medio grueso de una varilla dibujada (m)
 
-    for col in columnas_pb + columnas_pa:
-        if col.Id.Value in b.ids["columnas_pb"] + b.ids["columnas_pa"]:
-            varillas_columna(col)
+    def varilla_x(x0, x1, y, z):
+        return _caja(x0, y - D, z - D, x1, y + D, z + D)
+
+    def varilla_y(y0, y1, x, z):
+        return _caja(x - D, y0, z - D, x + D, y1, z + D)
+
+    def varilla_z(z0, z1, x, y):
+        return _caja(x - D, y - D, z0, x + D, y + D, z1)
+
+    def pasos(a, b_, sep):
+        n = max(1, int(round((b_ - a) / sep)))
+        return [a + (b_ - a) * k / float(n) for k in range(n + 1)]
+
+    def en_m(i):
+        (x0, y0, z0), (x1, y1, z1) = E[i]._cajas[0]
+        return x0 / M, y0 / M, z0 / M, x1 / M, y1 / M, z1 / M
+
+    def anillo(x0, y0, x1, y1, z):
+        return [varilla_x(x0, x1, y0, z), varilla_x(x0, x1, y1, z),
+                varilla_y(y0, y1, x0, z), varilla_y(y0, y1, x1, z)]
+
+    def nueva_varilla(rol, cajas, anfitrion, clase=Rebar, cat="OST_Rebar", tipo=t_varilla):
+        b.nuevo(clase, rol, "", cat, tipo, cajas, anfitrion=anfitrion)
+
+    # Columnas y castillos: 4 longitudinales + estribos @ 20 cm
+    for i in sum((b.ids[r] for r in ("columnas_pb", "castillos_pb", "columnas_pa", "castillos_pa")), []):
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        r = 0.035
+        nueva_varilla("varillas", [varilla_z(z0, z1, x, y) for x in (x0 + r, x1 - r) for y in (y0 + r, y1 - r)], i)
+        nueva_varilla("varillas", sum((anillo(x0 + r, y0 + r, x1 - r, y1 - r, z)
+                                      for z in pasos(z0 + 0.1, z1 - 0.1, 0.2)), []), i)
+
+    # Cadenas y trabes: 4 longitudinales + estribos @ 25 cm
     for e, x0, y0, x1, y1, z0, z1 in armazon:
-        cajas = [_caja_lineal(x0, y0, x1, y1, 0.02, z0 + 0.04, z0 + 0.06),
-                 _caja_lineal(x0, y0, x1, y1, 0.02, z1 - 0.06, z1 - 0.04)]
-        b.nuevo(Rebar, "varillas", "", "OST_Rebar", t_varilla, cajas, anfitrion=e.Id.Value)
-    # Una varilla suelta, sin anfitrión
-    b.nuevo(Rebar, "varillas_sueltas", "", "OST_Rebar", t_varilla, [_caja(9.0, 9.0, 0.0, 9.02, 9.02, 1.0)])
+        i, r = e.Id.Value, 0.035
+        if y0 == y1:
+            long_ = [varilla_x(x0, x1, y0 + s_, z) for s_ in (-0.075 + r, 0.075 - r) for z in (z0 + r, z1 - r)]
+            estr = sum((anillo(x - D, y0 - 0.075 + r, x + D, y0 + 0.075 - r, z0 + r) +
+                        [varilla_z(z0 + r, z1 - r, x, y0 + sg * (0.075 - r)) for sg in (-1, 1)]
+                        for x in pasos(x0 + 0.1, x1 - 0.1, 0.25)), [])
+        else:
+            long_ = [varilla_y(y0, y1, x0 + s_, z) for s_ in (-0.075 + r, 0.075 - r) for z in (z0 + r, z1 - r)]
+            estr = sum(([varilla_x(x0 - 0.075 + r, x0 + 0.075 - r, y, z0 + r),
+                         varilla_x(x0 - 0.075 + r, x0 + 0.075 - r, y, z1 - r)] +
+                        [varilla_z(z0 + r, z1 - r, x0 + sg * (0.075 - r), y) for sg in (-1, 1)]
+                        for y in pasos(y0 + 0.1, y1 - 0.1, 0.25)), [])
+        nueva_varilla("varillas", long_, i)
+        nueva_varilla("varillas", estr, i)
+
+    # Cimientos corridos: 3 longitudinales + transversales @ 25 cm en el lecho bajo
+    for i in b.ids["corridos"]:
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        z = z0 + 0.06
+        if (x1 - x0) > (y1 - y0):
+            cajas = [varilla_x(x0, x1, y, z + 0.015) for y in pasos(y0 + 0.08, y1 - 0.08, 0.2)]
+            cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z) for x in pasos(x0 + 0.1, x1 - 0.1, 0.25)]
+        else:
+            cajas = [varilla_y(y0, y1, x, z + 0.015) for x in pasos(x0 + 0.08, x1 - 0.08, 0.2)]
+            cajas += [varilla_x(x0 + 0.05, x1 - 0.05, y, z) for y in pasos(y0 + 0.1, y1 - 0.1, 0.25)]
+        nueva_varilla("varillas", cajas, i)
+
+    # Dados: parrilla inferior @ 15 cm en ambos sentidos
+    for i in b.ids["dados"]:
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        z = z0 + 0.07
+        cajas = [varilla_x(x0 + 0.05, x1 - 0.05, y, z) for y in pasos(y0 + 0.07, y1 - 0.07, 0.15)]
+        cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.015) for x in pasos(x0 + 0.07, x1 - 0.07, 0.15)]
+        nueva_varilla("varillas", cajas, i)
+
+    # Losa de planta baja: refuerzo de área (barras RebarInSystem) @ 30 cm, un lecho por sentido
+    for i in b.ids["losas_pb"]:
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        z = z0 + 0.03
+        nueva_varilla("varillas_area", [varilla_x(x0 + 0.05, x1 - 0.05, y, z)
+                                        for y in pasos(y0 + 0.1, y1 - 0.1, 0.3)], i, clase=RebarInSystem)
+        nueva_varilla("varillas_area", [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.015)
+                                        for x in pasos(x0 + 0.1, x1 - 0.1, 0.3)], i, clase=RebarInSystem)
+
+    # Losa de azotea: malla electrosoldada (FabricSheet) @ 15 cm
+    for i in b.ids["losas_pa"]:
+        x0, y0, z0, x1, y1, z1 = en_m(i)
+        z = z0 + 0.04
+        cajas = [varilla_x(x0 + 0.05, x1 - 0.05, y, z) for y in pasos(y0 + 0.1, y1 - 0.1, 0.15)]
+        cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.012) for x in pasos(x0 + 0.1, x1 - 0.1, 0.15)]
+        nueva_varilla("mallas", cajas, i, clase=FabricSheet, cat="OST_FabricReinforcement", tipo=t_malla)
+
+    # Una varilla sin anfitrión DENTRO de una columna (se ubica por el concreto que la contiene)
+    x0, y0, z0, x1, y1, z1 = en_m(b.ids["columnas_pb"][4])
+    xc, yc = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    nueva_varilla("varillas_contenidas", [varilla_z(z0 + 0.2, z1 - 0.2, xc, yc)], None)
+    # Y una fuera de todo concreto (queda como etapa "acero")
+    nueva_varilla("varillas_sueltas", [_caja(9.0, 9.0, 0.0, 9.02, 9.02, 1.0)], None)
 
     # Vistas: base isométrica, una en perspectiva y una plantilla
     base = View3D(doc, doc._siguiente_id(), "{3D}")

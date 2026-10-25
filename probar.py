@@ -50,8 +50,8 @@ def prueba(fn):
 #  Utilidades
 # -----------------------------------------------------------------------------
 
-ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "tipos",
-                       "varillas", "varillas_sueltas"}
+ROLES_ACERO = {"varillas", "varillas_area", "mallas", "varillas_contenidas", "varillas_sueltas"}
+ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "tipos"} | ROLES_ACERO
 CADENA_ORDEN = [
     ["corridos"], ["dados"], ["desplante"], ["columnas_pb", "castillos_pb"], ["muros_pb"],
     ["trabes_pb"], ["losas_pb"], ["escaleras"], ["columnas_pa", "castillos_pa"], ["muros_pa"],
@@ -189,7 +189,7 @@ def secuencia_de_obra(tmp):
     ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
     est = estructura(doc)
     base = ids_rol(doc, "terreno", "genericos")
-    nunca = ids_rol(doc, "puertas", "muro_oculto_base", "varillas", "varillas_sueltas")
+    nunca = ids_rol(doc, "puertas", "muro_oculto_base", *ROLES_ACERO)
     previo = set()
     for e in ex:
         n, vis = numero_cuadro(e["ruta"]), set(e["visibles"])
@@ -218,9 +218,9 @@ def secuencia_de_obra(tmp):
 
 @prueba
 def camara_y_encuadre(tmp):
-    doc, out, _ = correr(os.path.join(tmp, "camara"))
+    doc, out, _ = correr(os.path.join(tmp, "camara"), acero=True, exportador=simulador.exportador_vacio)
     ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
-    est = estructura(doc)
+    est = estructura(doc) | ids_rol(doc, *ROLES_ACERO)  # el encuadre incluye el acero
     cajas = [c for i in est for c in doc._elementos[i]._cajas]
     xs = [c[k][0] for c in cajas for k in (0, 1)]
     ys = [c[k][1] for c in cajas for k in (0, 1)]
@@ -275,20 +275,58 @@ def transacciones(tmp):
 
 
 @prueba
-def con_acero(tmp):
-    doc, out, _ = correr(os.path.join(tmp, "acero"), acero=True)
+def armado_antes_del_concreto(tmp):
+    doc, out, _ = correr(os.path.join(tmp, "acero"), acero=True, exportador=simulador.exportador_vacio)
+    est = simulador.estado
     inf = leer(out)
-    assert "ERRORES (0)" in inf and "Armadura estructural" in inf
-    primera = primera_aparicion(simulador.estado.exportes)
-    for i in ids_rol(doc, "varillas"):
-        anf = doc._elementos[i]._anfitrion
-        assert primera[i] <= primera[anf], "la varilla %d debe aparecer antes que su anfitrión" % i
-    assert ids_rol(doc, "varillas_sueltas") <= set(primera)
-    # Una segunda corrida sin acero sobre la misma vista vuelve a ocultar la categoría
-    carpeta2 = os.path.join(tmp, "acero_luego_sin")
-    correr(carpeta2, doc=doc, acero=False, fps=5, duracion=6)
+    assert "ERRORES (0)" in inf, inf[-3000:]
+    assert "Armadura estructural" in inf and "Malla electrosoldada" in inf
+    assert est.modificaciones_modelo == [], "el acero solo admite ajustes gráficos de vista"
+    ex = sorted(est.exportes, key=lambda e: numero_cuadro(e["ruta"]))
+    primera = primera_aparicion(ex)
+    acero = ids_rol(doc, *ROLES_ACERO)
+    assert acero <= set(primera), "todo el acero debe aparecer"
+
+    # Etapa (índice en CADENA_ORDEN) de cada rol de concreto
+    etapa_de_rol = {r: k for k, grupo in enumerate(CADENA_ORDEN) for r in grupo}
+    rol_de = {i: r for r, ids in doc._ids_por_rol.items() for i in ids}
+
+    def rango_concreto(k):
+        fs = [primera[i] for i in ids_rol(doc, *CADENA_ORDEN[k])]
+        return min(fs), max(fs)
+
+    con_anfitrion = ids_rol(doc, "varillas", "varillas_area", "mallas")
+    assert ids_rol(doc, "varillas_area") and ids_rol(doc, "mallas")
+    for i in con_anfitrion:
+        k = etapa_de_rol[rol_de[doc._elementos[i]._anfitrion]]
+        ini_k, _ = rango_concreto(k)
+        assert primera[i] <= ini_k, "el acero %d debe aparecer antes que el concreto de su etapa" % i
+        if k > 0:
+            assert primera[i] >= rango_concreto(k - 1)[1], \
+                "el acero %d no debe aparecer antes de terminar la etapa anterior" % i
+    # Varilla sin anfitrión dentro de una columna: se ubica en el armado de columnas
+    k = etapa_de_rol["columnas_pb"]
+    for i in ids_rol(doc, "varillas_contenidas"):
+        assert rango_concreto(k - 1)[1] <= primera[i] <= rango_concreto(k)[0]
+
+    # Todo el acero queda "sin obstrucciones" y "como sólido" SOLO en la vista de video
+    vista_video = ex[0]["vista"]
+    assert all(acero <= set(e["sin_obstruccion"]) for e in ex)
+    assert {a[1] for a in est.ajustes_acero} == {vista_video}
+    assert {a[2] for a in est.ajustes_acero} == {"SetUnobscuredInView", "SetSolidInView"}
+    assert len(est.ajustes_acero) == 2 * len(acero)
+    # Una vez colocado, el armado sigue visible hasta el final
+    previo = set()
+    for e in ex:
+        actual = set(e["visibles"]) & acero
+        assert previo <= actual
+        previo = actual
+    assert previo == acero
+
+    # Una segunda corrida sin acero sobre la misma vista vuelve a ocultar sus categorías
+    correr(os.path.join(tmp, "acero_luego_sin"), doc=doc, acero=False, fps=5, duracion=6)
     ult = simulador.estado.exportes[-1]
-    assert not (set(ult["visibles"]) & ids_rol(doc, "varillas"))
+    assert not (set(ult["visibles"]) & acero)
 
 
 @prueba
@@ -366,6 +404,8 @@ def grafo_dyn_valido():
     assert ids_vista == {n["Id"] for n in g["Nodes"]}
     assert g["View"]["Dynamo"]["RunType"] == "Manual"
     assert len(g["Inputs"]) == 6
+    acero = conectados[py["Inputs"][5]["Id"]]
+    assert acero["InputValue"] is True, "el acero debe venir activado por defecto"
 
 
 @prueba
@@ -373,7 +413,7 @@ def armar_video_mp4(tmp):
     import armar_video
     import imageio_ffmpeg
     carpeta = os.path.join(tmp, "video")
-    correr(carpeta)
+    correr(carpeta, acero=True, exportador=simulador.exportador_vacio)
     r = armar_video.armar(carpeta, progreso=False)
     assert not r["faltantes"]
     nombres = sorted(f for f in os.listdir(carpeta) if f.endswith(".png"))
@@ -404,6 +444,19 @@ def rotulos_y_orden_de_archivos(tmp):
                 "Planta alta", "Azotea"]
     assert secuencia == esperado, secuencia
     assert all(t == "" for t in textos[:22]) and all(t == "" for t in textos[361:])
+    # Con acero: cada etapa con armado muestra primero su rótulo de armado
+    carpeta = os.path.join(tmp, "rotulos_acero")
+    correr(carpeta, acero=True, exportador=simulador.exportador_vacio)
+    textos = armar_video.rotulos_por_cuadro(armar_video.leer_guion(carpeta), 450)
+    secuencia = []
+    for t in textos:
+        if t and (not secuencia or secuencia[-1] != t):
+            secuencia.append(t)
+    esperado = ["Armado de cimentación", "Cimentación"] * 3 + [
+        "Armado de castillos y columnas", "Castillos y columnas", "Muros", "Armado de trabes y cadenas",
+        "Trabes y cadenas", "Armado de losa", "Losa", "Armado planta alta", "Planta alta",
+        "Armado planta alta", "Planta alta", "Armado de azotea", "Azotea"]
+    assert secuencia == esperado, secuencia
     # Orden numérico sin depender del sufijo de Revit, con un duplicado más reciente
     d = os.path.join(tmp, "nombres")
     os.makedirs(d)
@@ -436,7 +489,7 @@ def main():
     secuencia_de_obra(tmp)
     camara_y_encuadre(tmp)
     transacciones(tmp)
-    con_acero(tmp)
+    armado_antes_del_concreto(tmp)
     reanudable_tras_cierre_de_revit(tmp)
     error_en_un_cuadro_queda_en_informe(tmp)
     entradas_invalidas_dan_informe(tmp)

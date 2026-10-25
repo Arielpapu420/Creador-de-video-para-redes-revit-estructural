@@ -5,7 +5,7 @@ nodo, la secuencia de obra y la cámara son exactamente las del video real.
 
     python previa.py                 -> salida_previa/previa.mp4 (540x960)
     python previa.py --gif           -> además salida_previa/previa.gif
-    python previa.py --grados 360 --acero --duracion 20
+    python previa.py --grados 360 --sin-acero --duracion 20
 
 Los cuadros quedan en salida_previa/cuadros (reanudable: si existen, se saltan;
 usa --limpiar para empezar de cero).
@@ -30,7 +30,7 @@ def main(argv=None):
     ap.add_argument("--fps", type=float, default=15, help="FPS de exportación (entrada IN[2])")
     ap.add_argument("--duracion", type=float, default=30, help="Duración en s (IN[3])")
     ap.add_argument("--grados", type=float, default=180, help="Grados de giro (IN[4])")
-    ap.add_argument("--acero", action="store_true", help="Incluir acero (IN[5])")
+    ap.add_argument("--sin-acero", action="store_true", help="No incluir el acero (IN[5] = False)")
     ap.add_argument("--escala", type=float, default=0.5, help="Tamaño de cuadro: 0.5 = 540x960")
     ap.add_argument("--marca", default=armar_video.TARJETA_TEXTO)
     ap.add_argument("--gif", action="store_true", help="Generar también un GIF (mitad de tamaño, 10 fps)")
@@ -46,7 +46,7 @@ def main(argv=None):
     doc = modelo_sintetico.crear_documento()
     simulador.reiniciar(doc, exportador=simulador.exportador_matplotlib, escala=args.escala)
     informe = simulador.ejecutar_nodo(os.path.join(AQUI, "nodo_video.py"),
-                                      [carpeta, "{3D}", args.fps, args.duracion, args.grados, args.acero])
+                                      [carpeta, "{3D}", args.fps, args.duracion, args.grados, not args.sin_acero])
     print("Cuadros dibujados en %.1f s. Informe: %s" % (time.time() - t0, informe))
     with open(informe, encoding="utf-8") as f:
         if "ERRORES (0)" not in f.read():

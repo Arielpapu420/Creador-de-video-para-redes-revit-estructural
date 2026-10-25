@@ -48,8 +48,9 @@ BuiltInCategory = _enum("BuiltInCategory", [
     "OST_Roofs", "OST_Ceilings", "OST_Railings", "OST_StairsRailing", "OST_Columns",
     "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections", "OST_AreaRein",
     "OST_PathRein", "OST_Furniture", "OST_Casework", "OST_PlumbingFixtures", "OST_LightingFixtures",
-    "OST_SpecialityEquipment", "OST_Grids",
+    "OST_SpecialityEquipment", "OST_Grids", "OST_FabricReinforcement", "OST_FabricAreas", "OST_Coupler",
 ])
+ViewDetailLevel = _enum("ViewDetailLevel", ["Undefined", "Coarse", "Medium", "Fine"])
 BuiltInParameter = _enum("BuiltInParameter", ["SYMBOL_NAME_PARAM", "ALL_MODEL_TYPE_NAME"])
 ViewDuplicateOption = _enum("ViewDuplicateOption", ["Duplicate", "WithDetailing", "AsDependent"])
 ExportRange = _enum("ExportRange", ["CurrentView", "VisibleRegionOfCurrentView", "SetOfViews"])
@@ -344,13 +345,54 @@ class Toposolid(Element):
     pass
 
 
-class Rebar(Element):
+class _AceroBase(Element):
+    """Acero de refuerzo: ajustes gráficos por vista (no cambian geometría)."""
+
     def __init__(self, *args, **kw):
         anfitrion = kw.pop("anfitrion", None)
         Element.__init__(self, *args, **kw)
         object.__setattr__(self, "_anfitrion", anfitrion)
+        object.__setattr__(self, "_sin_obstruccion", set())
+        object.__setattr__(self, "_solido", set())
 
+    def _ajuste(self, vista, conjunto, valor, que):
+        if not self._doc._transaccion:
+            raise ErrorRevit("Modificación fuera de transacción: %s" % que)
+        if valor:
+            conjunto.add(vista.Id.Value)
+        else:
+            conjunto.discard(vista.Id.Value)
+        simulador.estado.ajustes_acero.append((self._id.Value, vista.Id.Value, que, valor))
+
+    def SetUnobscuredInView(self, vista, valor):
+        self._ajuste(vista, self._sin_obstruccion, valor, "SetUnobscuredInView")
+
+    def IsUnobscuredInView(self, vista):
+        return vista.Id.Value in self._sin_obstruccion
+
+    def SetSolidInView(self, vista, valor):
+        if not isinstance(vista, View3D):
+            raise TypeError("SetSolidInView espera View3D")
+        self._ajuste(vista, self._solido, valor, "SetSolidInView")
+
+    def IsSolidInView(self, vista):
+        return vista.Id.Value in self._solido
+
+
+class Rebar(_AceroBase):
     def GetHostId(self):
+        return ElementId(self._anfitrion) if self._anfitrion else ElementId.InvalidElementId
+
+
+class RebarInSystem(Rebar):
+    """Barras de un refuerzo de área o de camino (categoría Armadura estructural)."""
+
+
+class FabricSheet(_AceroBase):
+    """Hoja de malla electrosoldada: el anfitrión se lee con la propiedad HostId."""
+
+    @property
+    def HostId(self):
         return ElementId(self._anfitrion) if self._anfitrion else ElementId.InvalidElementId
 
 
@@ -399,13 +441,14 @@ class View3D(Element):
         s(self, "_crop_activa", False)
         s(self, "_crop_visible", True)
         s(self, "_caja_seccion", False)
+        s(self, "_detalle", ViewDetailLevel.Medium)
 
     def _exigir_transaccion(self, que):
         if not self._doc._transaccion:
             raise ErrorRevit("Modificación fuera de transacción: %s" % que)
 
     def __setattr__(self, nombre, valor):
-        props = {"CropBox", "CropBoxActive", "CropBoxVisible"}
+        props = {"CropBox", "CropBoxActive", "CropBoxVisible", "DetailLevel"}
         if nombre == "Name":
             self._fijar_nombre(valor)
         elif nombre in props:
@@ -425,6 +468,8 @@ class View3D(Element):
     IsPerspective = property(lambda s: s._perspectiva)
     IsLocked = property(lambda s: s._bloqueada)
     IsSectionBoxActive = property(lambda s: s._caja_seccion)
+    DetailLevel = property(lambda s: s._detalle,
+                           lambda s, v: object.__setattr__(s, "_detalle", v))
 
     def Unlock(self):
         self._exigir_transaccion("Unlock")
@@ -686,5 +731,7 @@ class Document(object):
                 "orientacion": vista._orient,
                 "crop": (vista._crop_min, vista._crop_max),
                 "crop_activa": vista._crop_activa,
+                "sin_obstruccion": sorted(k for k, e in self._elementos.items()
+                                          if isinstance(e, _AceroBase) and e.IsUnobscuredInView(vista)),
             })
             est.exportador(self, vista, ruta, ancho, alto)

@@ -20,7 +20,8 @@ ENTRADAS = [
     ("FPS de exportación", "numero", 15.0, "Cuadros por segundo que exporta Revit (15 = 450 cuadros en 30 s)"),
     ("Duración (s)", "numero", 30.0, "Duración del video en segundos"),
     ("Grados de giro", "numero", 180.0, "Giro total de la cámara alrededor de la estructura"),
-    ("Incluir acero", "booleano", False, "Incluir Armadura estructural (Rebar)"),
+    ("Incluir acero", "booleano", True,
+     "Incluir el acero: varillas, barras de refuerzo de área/camino y mallas (armado antes del concreto)"),
 ]
 
 

@@ -51,10 +51,24 @@ ROTULOS_ETAPA = {
     "escaleras": "Losa",
     "otros": "",
 }
+# Mientras aparece el acero de una etapa (antes de su concreto)
+ROTULOS_ARMADO = {
+    "cimentacion": "Armado de cimentación",
+    "dados": "Armado de cimentación",
+    "desplante": "Armado de cimentación",
+    "columnas": "Armado de castillos y columnas",
+    "muros": "Armado de muros",
+    "trabes": "Armado de trabes y cadenas",
+    "losas": "Armado de losa",
+    "escaleras": "Armado de escalera",
+    "otros": "Armado",
+}
 ROTULO_PLANTA_ALTA = "Planta alta"   # cualquier etapa en niveles superiores
 ROTULO_AZOTEA = "Azotea"             # losa más alta y lo que esté encima
+ROTULO_ARMADO_PLANTA_ALTA = "Armado planta alta"
+ROTULO_ARMADO_AZOTEA = "Armado de azotea"
 ROTULO_FINAL = ""                    # texto durante el remate (vacío = sin rótulo)
-ROTULO_MIN_S = 0.8                   # un rótulo dura al menos esto (evita parpadeos)
+ROTULO_MIN_S = 0.5                   # un rótulo dura al menos esto (evita parpadeos)
 ROTULO_FUNDIDO_S = 0.3
 ROTULO_Y = 0.80                      # centro vertical (fracción del alto), fuera de la zona de botones
 ROTULO_TAM = 0.024                   # tamaño de letra (fracción del alto: 46 px en 1920)
@@ -176,15 +190,15 @@ def rotulos_por_cuadro(guion, n_entrada):
             return ""
         if c["fase"] == "final":
             return ROTULO_FINAL
-        etapa, nivel = c.get("etapa"), c.get("nivel")
+        etapa, nivel, armado = c.get("etapa"), c.get("nivel"), c.get("armado", False)
         if etapa is None:
             return ""
         if nivel is None or nivel == 0:
-            return ROTULOS_ETAPA.get(etapa, "")
+            return (ROTULOS_ARMADO if armado else ROTULOS_ETAPA).get(etapa, "")
         if nivel_azotea is not None and nivel_azotea > 0 and (
                 nivel > nivel_azotea or (nivel == nivel_azotea and etapa == "losas")):
-            return ROTULO_AZOTEA
-        return ROTULO_PLANTA_ALTA
+            return ROTULO_ARMADO_AZOTEA if armado else ROTULO_AZOTEA
+        return ROTULO_ARMADO_PLANTA_ALTA if armado else ROTULO_PLANTA_ALTA
 
     textos = [texto(c) for c in cuadros[:n_entrada]]
     textos += [""] * (n_entrada - len(textos))
