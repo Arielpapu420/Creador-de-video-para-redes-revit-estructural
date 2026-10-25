@@ -23,6 +23,7 @@ class Estado(object):
         self.modificaciones_modelo = []  # intentos de modificar/borrar elementos (debe quedar vacío)
         self.vistas_creadas = []
         self.ajustes_acero = []         # (id, vista, método, valor) de ajustes gráficos del acero
+        self.piezas_creadas = 0         # DirectShape creadas por nodo_piezas.py
         self.fallos = {}                # {n_export: "error" | "caida"}
         self.contador_export = 0
         self.exportador = exportador_rapido
@@ -36,6 +37,7 @@ def reiniciar(doc, exportador=None, escala=None, fallos=None):
     estado.exportes = []
     estado.vistas_creadas = []
     estado.ajustes_acero = []
+    estado.piezas_creadas = 0
     estado.fallos = dict(fallos or {})
     estado.contador_export = 0
     if exportador is not None:

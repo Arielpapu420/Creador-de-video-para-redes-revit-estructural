@@ -5,7 +5,8 @@ nodo, la secuencia de obra y la cámara son exactamente las del video real.
 
     python previa.py                 -> salida_previa/previa.mp4 (540x960)
     python previa.py --gif           -> además salida_previa/previa.gif
-    python previa.py --grados 360 --sin-acero --duracion 20
+    python previa.py --grados 360 --sin-acero --duracion 30
+    python previa.py --sin-piezas    -> muros sólidos, sin blocks ni piedras
 
 Los cuadros quedan en salida_previa/cuadros (reanudable: si existen, se saltan;
 usa --limpiar para empezar de cero).
@@ -28,9 +29,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Previa del video de obra con el modelo sintético.")
     ap.add_argument("--salida", default=os.path.join(AQUI, "salida_previa"))
     ap.add_argument("--fps", type=float, default=15, help="FPS de exportación (entrada IN[2])")
-    ap.add_argument("--duracion", type=float, default=30, help="Duración en s (IN[3])")
+    ap.add_argument("--duracion", type=float, default=60, help="Duración en s (IN[3])")
     ap.add_argument("--grados", type=float, default=180, help="Grados de giro (IN[4])")
     ap.add_argument("--sin-acero", action="store_true", help="No incluir el acero (IN[5] = False)")
+    ap.add_argument("--sin-piezas", action="store_true", help="No correr nodo_piezas.py (muros sólidos)")
     ap.add_argument("--escala", type=float, default=0.5, help="Tamaño de cuadro: 0.5 = 540x960")
     ap.add_argument("--marca", default=armar_video.TARJETA_TEXTO)
     ap.add_argument("--gif", action="store_true", help="Generar también un GIF (mitad de tamaño, 10 fps)")
@@ -44,6 +46,10 @@ def main(argv=None):
 
     t0 = time.time()
     doc = modelo_sintetico.crear_documento()
+    if not args.sin_piezas:
+        simulador.reiniciar(doc)
+        resumen = simulador.ejecutar_nodo(os.path.join(AQUI, "nodo_piezas.py"), [40, 20, 12, 1, True, False])
+        print(resumen.splitlines()[1] if "\n" in resumen else resumen)
     simulador.reiniciar(doc, exportador=simulador.exportador_matplotlib, escala=args.escala)
     informe = simulador.ejecutar_nodo(os.path.join(AQUI, "nodo_video.py"),
                                       [carpeta, "{3D}", args.fps, args.duracion, args.grados, not args.sin_acero])

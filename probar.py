@@ -23,11 +23,13 @@ sys.path.insert(0, os.path.join(AQUI, "mock"))
 
 import simulador          # noqa: E402
 import modelo_sintetico   # noqa: E402
-from Autodesk.Revit.DB import XYZ, Element, ElementType, View3D, ErrorRevit  # noqa: E402
+from Autodesk.Revit.DB import XYZ, DirectShape, Element, ElementType, View3D, ErrorRevit  # noqa: E402
 from System.Collections.Generic import List  # noqa: E402
 
 RUTA_NODO = os.path.join(AQUI, "nodo_video.py")
 RUTA_DYN = os.path.join(AQUI, "Video_Obra.dyn")
+RUTA_PIEZAS = os.path.join(AQUI, "nodo_piezas.py")
+RUTA_DYN_PIEZAS = os.path.join(AQUI, "Piezas_Obra.dyn")
 
 RESULTADOS = []
 
@@ -292,7 +294,7 @@ def clasificacion_de_detalles(tmp):
     base = next(e for e in doc._elementos.values() if isinstance(e, View3D) and e._nombre == "{3D}")
     inf = esp["Informe"]()
     niveles = esp["leer_niveles"](doc)
-    piezas = esp["ordenar_piezas"](esp["recoger_piezas"](doc, base, True, inf), niveles, inf)
+    piezas, _ = esp["ordenar_piezas"](esp["recoger_piezas"](doc, base, True, inf), niveles, inf)
     etapa = {p.clave: (p.etapa, p.nivel) for p in piezas}
     for rol, esperada in ETAPA_ESPERADA.items():
         for i in doc._ids_por_rol[rol]:
@@ -450,30 +452,167 @@ def entradas_invalidas_dan_informe(tmp):
 
 
 @prueba
-def grafo_dyn_valido():
-    with open(RUTA_DYN, encoding="utf-8") as f:
+def piezas_solo_en_copia_video():
+    doc = modelo_sintetico.crear_documento("Casa original")
+    simulador.reiniciar(doc)
+    antes = len(doc._elementos)
+    out = simulador.ejecutar_nodo(RUTA_PIEZAS, [])
+    assert out.startswith("NO SE HIZO NADA") and len(doc._elementos) == antes
+    assert simulador.estado.piezas_creadas == 0
+
+
+def piezas_de(doc):
+    """{clave pieza: (tipo, muro, hilada)} de las DirectShape VIDEO_OBRA."""
+    res = {}
+    for k, e in doc._elementos.items():
+        if isinstance(e, DirectShape) and e.ApplicationId == "VIDEO_OBRA":
+            _, tipo, muro, hilada, _ = e.ApplicationDataId.split("|")
+            res[k] = (tipo, int(muro), int(hilada))
+    return res
+
+
+def _cruce(a, b, tol=0.002 * modelo_sintetico.M):
+    """True si dos cajas se traslapan más que la tolerancia en los tres ejes."""
+    return all(min(a[1][i], b[1][i]) - max(a[0][i], b[0][i]) > tol for i in range(3))
+
+
+@prueba
+def piezas_block_y_piedra():
+    M = modelo_sintetico.M
+    doc = modelo_sintetico.crear_documento()
+    originales = {k: list(e._cajas) for k, e in doc._elementos.items()}
+    simulador.reiniciar(doc)
+    out = simulador.ejecutar_nodo(RUTA_PIEZAS, [40, 20, 12, 1, True, False])
+    assert "ERROR" not in out and "omitidos" not in out, out
+    assert simulador.estado.modificaciones_modelo == []
+    assert all(doc._elementos[k]._cajas == v for k, v in originales.items()), "cambió un elemento original"
+    piezas = piezas_de(doc)
+    por_muro = {}
+    for k, (tipo, muro, hilada) in piezas.items():
+        por_muro.setdefault(muro, []).append((k, tipo, hilada))
+    for rol in ("muros_pb", "muros_pa", "pretiles"):
+        for m in doc._ids_por_rol[rol]:
+            assert m in por_muro and {t for _, t, _ in por_muro[m]} == {"block"}, rol
+    for m in doc._ids_por_rol["mamposteria"]:
+        assert {t for _, t, _ in por_muro[m]} == {"piedra", "mortero"}
+    assert not (ids_rol(doc, "cisterna", "corridos") & set(por_muro)), "la cisterna y el concreto no se convierten"
+    # Blocks de 39 x 19 cm (12x20x40 con junta de 1 cm), 13 hiladas en un muro de 2.6 m;
+    # en el muro con dala de repartición, la hilada que ocupa la dala no lleva blocks
+    dala = next(iter(ids_rol(doc, "trabes_pb") & {i for i in doc._ids_por_rol["trabes_pb"]
+                                                  if doc._elementos[i]._cajas[0][1][2] < 1.5 * M}))
+    for m in doc._ids_por_rol["muros_pb"]:
+        hiladas = {h for _, _, h in por_muro[m]}
+        assert max(hiladas) == 12, max(hiladas)  # 13 hiladas (la dala ocupa una en su muro)
+        (mx0, my0, _), (mx1, my1, _) = doc._elementos[m]._cajas[0]
+        en_x = (mx1 - mx0) >= (my1 - my0)  # el muro corre en X
+        for k, _, _ in por_muro[m]:
+            (x0, y0, z0), (x1, y1, z1) = doc._elementos[k]._cajas[0]
+            largo, espesor = (x1 - x0, y1 - y0) if en_x else (y1 - y0, x1 - x0)
+            assert 0.05 * M - 1e-6 <= largo <= 0.39 * M + 1e-6 and z1 - z0 <= 0.19 * M + 1e-6
+            assert abs(espesor - 0.12 * M) < 1e-6
+    muro_dala = next(m for m in doc._ids_por_rol["muros_pb"]
+                     if _cruce(doc._elementos[m]._cajas[0], doc._elementos[dala]._cajas[0]))
+    assert len({h for _, _, h in por_muro[muro_dala]}) == 12
+    # Cuatrapeado: las juntas verticales de dos hiladas seguidas no coinciden
+    m = doc._ids_por_rol["muros_pb"][0]
+    juntas = {}
+    for k, _, h in por_muro[m]:
+        (x0, _, _), (x1, _, _) = doc._elementos[k]._cajas[0]
+        juntas.setdefault(h, set()).add(round(x1 / M, 3))
+    assert len(juntas[0] & juntas[1]) <= 1
+    # Ninguna pieza invade castillos, columnas, dalas, cerramientos o la puerta
+    obst = [doc._elementos[i]._cajas[0] for i in
+            ids_rol(doc, "columnas_pb", "castillos_pb", "columnas_pa", "castillos_pa", "trabes_pb", "puertas")]
+    for k in piezas:
+        c = doc._elementos[k]._cajas[0]
+        assert not any(_cruce(c, o) for o in obst), "la pieza %d invade un obstáculo" % k
+    # Las piezas no se encimen entre sí (el mortero va dentro de la hilada de piedra)
+    for muro, lista in por_muro.items():
+        cajas = [(doc._elementos[k]._cajas[0], t) for k, t, _ in lista if t != "mortero"]
+        for i in range(len(cajas)):
+            for j in range(i + 1, len(cajas)):
+                assert not _cruce(cajas[i][0], cajas[j][0]), "piezas encimadas en el muro %d" % muro
+    # Volver a correr reemplaza las piezas; "solo borrar" las quita todas
+    n = len(piezas)
+    simulador.ejecutar_nodo(RUTA_PIEZAS, [40, 20, 12, 1, True, False])
+    assert len(piezas_de(doc)) == n
+    out = simulador.ejecutar_nodo(RUTA_PIEZAS, [40, 20, 12, 1, True, True])
+    assert "borradas: %d" % n in out and not piezas_de(doc)
+    assert simulador.estado.modificaciones_modelo == []
+
+
+@prueba
+def video_con_piezas_hilada_por_hilada(tmp):
+    doc = modelo_sintetico.crear_documento()
+    simulador.reiniciar(doc)
+    simulador.ejecutar_nodo(RUTA_PIEZAS, [])
+    piezas = piezas_de(doc)
+    _, out, _ = correr(os.path.join(tmp, "piezas"), doc=doc, acero=True, exportador=simulador.exportador_vacio)
+    inf = leer(out)
+    assert "ERRORES (0)" in inf and "Muros sustituidos por piezas" in inf, inf[-3000:]
+    ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
+    primera = primera_aparicion(ex)
+    muros = ids_rol(doc, "muros_pb", "muros_pa", "pretiles", "mamposteria")
+    huerfanas = {k for k, (_, m, _) in piezas.items() if m in ids_rol(doc, "muro_oculto_base")}
+    for e in ex:
+        assert not (set(e["visibles"]) & (muros | huerfanas)), "un muro sólido o una pieza huérfana se ve"
+    assert set(piezas) - huerfanas <= set(primera), "todas las piezas se colocan"
+
+    def hiladas(rol):
+        res = {}
+        for k, (tipo, m, h) in piezas.items():
+            if m in ids_rol(doc, rol):
+                res.setdefault(h, []).append((primera[k], tipo))
+        return res
+
+    for rol in ("muros_pb", "muros_pa", "mamposteria"):
+        hs = hiladas(rol)
+        for h in range(max(hs)):
+            assert max(f for f, _ in hs[h]) <= min(f for f, _ in hs[h + 1]), \
+                "%s: la hilada %d debe terminar antes de empezar la %d" % (rol, h, h + 1)
+    for h, lista in hiladas("mamposteria").items():
+        assert min(f for f, t in lista if t == "mortero") <= min(f for f, t in lista if t == "piedra")
+    # Las piezas van en la etapa de su muro: después de castillos y antes de trabes
+    pb = [primera[k] for k, (_, m, _) in piezas.items() if m in ids_rol(doc, "muros_pb")]
+    assert max(primera[i] for i in ids_rol(doc, "castillos_pb")) <= min(pb)
+    assert max(pb) <= min(primera[i] for i in ids_rol(doc, "trabes_pb"))
+    piedra = [primera[k] for k, (t, m, _) in piezas.items() if m in ids_rol(doc, "mamposteria")]
+    assert max(primera[i] for i in ids_rol(doc, "dados")) <= min(piedra)
+    assert max(piedra) <= min(primera[i] for i in ids_rol(doc, "cisterna"))
+
+
+def _verificar_dyn(ruta_dyn, ruta_nodo, tipos_esperados):
+    with open(ruta_dyn, encoding="utf-8") as f:
         g = json.load(f)
-    with open(RUTA_NODO, encoding="utf-8") as f:
+    with open(ruta_nodo, encoding="utf-8") as f:
         codigo = f.read()
     py = [n for n in g["Nodes"] if n["ConcreteType"].startswith("PythonNodeModels.PythonNode")]
     assert len(py) == 1
     py = py[0]
     assert py["Engine"] == "CPython3"
-    assert py["Code"] == codigo, "el código del .dyn difiere de nodo_video.py: corre generar_dyn.py"
-    assert [p["Name"] for p in py["Inputs"]] == ["IN[%d]" % i for i in range(6)]
+    assert py["Code"] == codigo, "el código de %s difiere de %s: corre generar_dyn.py" % (
+        os.path.basename(ruta_dyn), os.path.basename(ruta_nodo))
+    assert [p["Name"] for p in py["Inputs"]] == ["IN[%d]" % i for i in range(len(tipos_esperados))]
     salidas = {p["Id"]: n for n in g["Nodes"] for p in n["Outputs"]}
     entradas = {p["Id"] for p in py["Inputs"]}
     conectados = {c["End"]: salidas[c["Start"]] for c in g["Connectors"]}
     assert set(conectados) == entradas, "cada IN[i] debe tener su nodo de entrada"
-    tipos = [conectados[p["Id"]]["ConcreteType"].split(",")[0] for p in py["Inputs"]]
-    assert tipos == ["CoreNodeModels.Input.StringInput"] * 2 + ["CoreNodeModels.Input.DoubleInput"] * 3 + \
-        ["CoreNodeModels.Input.BoolSelector"], tipos
+    tipos = [conectados[p["Id"]]["ConcreteType"].split(",")[0].split(".")[-1] for p in py["Inputs"]]
+    assert tipos == tipos_esperados, tipos
     ids_vista = {v["Id"] for v in g["View"]["NodeViews"]}
     assert ids_vista == {n["Id"] for n in g["Nodes"]}
     assert g["View"]["Dynamo"]["RunType"] == "Manual"
-    assert len(g["Inputs"]) == 6
-    acero = conectados[py["Inputs"][5]["Id"]]
-    assert acero["InputValue"] is True, "el acero debe venir activado por defecto"
+    assert len(g["Inputs"]) == len(tipos_esperados)
+    return py, conectados
+
+
+@prueba
+def grafo_dyn_valido():
+    py, conectados = _verificar_dyn(RUTA_DYN, RUTA_NODO, ["StringInput"] * 2 + ["DoubleInput"] * 3 + ["BoolSelector"])
+    assert conectados[py["Inputs"][5]["Id"]]["InputValue"] is True, "el acero debe venir activado por defecto"
+    assert conectados[py["Inputs"][3]["Id"]]["InputValue"] == 60.0, "duración por defecto: 60 s"
+    py, conectados = _verificar_dyn(RUTA_DYN_PIEZAS, RUTA_PIEZAS, ["DoubleInput"] * 4 + ["BoolSelector"] * 2)
+    assert [conectados[p["Id"]]["InputValue"] for p in py["Inputs"]] == [40.0, 20.0, 12.0, 1.0, True, False]
 
 
 @prueba
@@ -565,6 +704,9 @@ def main():
     reanudable_tras_cierre_de_revit(tmp)
     error_en_un_cuadro_queda_en_informe(tmp)
     entradas_invalidas_dan_informe(tmp)
+    piezas_solo_en_copia_video()
+    piezas_block_y_piedra()
+    video_con_piezas_hilada_por_hilada(tmp)
     grafo_dyn_valido()
     rotulos_y_orden_de_archivos(tmp)
     if not args.sin_video:

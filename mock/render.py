@@ -32,6 +32,17 @@ _CARAS = [  # (índices de esquinas, normal)
 ]
 
 
+def _color_pieza(e):
+    """Blocks grises, mortero claro y piedras en tonos café/gris variados."""
+    dato = e.ApplicationDataId or ""
+    if "|mortero|" in dato:
+        return (200, 194, 182)
+    if "|piedra|" in dato:
+        tonos = [(132, 112, 88), (112, 102, 88), (150, 128, 100), (100, 94, 84), (124, 108, 82)]
+        return tonos[e.Id.Value % len(tonos)]
+    return (190, 188, 182) if e.Id.Value % 3 else (178, 176, 170)
+
+
 def _tapado(doc, vista, e):
     """True si el acero obstruido queda dentro de un concreto visible (su anfitrión o el que lo contiene)."""
     anf = doc._elementos.get(e._anfitrion) if e._anfitrion else None
@@ -62,6 +73,8 @@ def _poligonos(doc, vista):
             continue
         clave = e.Category.BuiltInCategory.nombre if e.Category is not None else ""
         base = COLORES.get(clave, COLOR_OTRO)
+        if getattr(e, "ApplicationId", "") == "VIDEO_OBRA":
+            base = _color_pieza(e)
         # Acero "sin obstrucciones": Revit lo dibuja encima del concreto. Si está
         # obstruido y su concreto ya está visible, queda tapado: no se dibuja.
         encima = 0.0

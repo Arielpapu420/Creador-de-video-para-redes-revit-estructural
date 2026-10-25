@@ -1,11 +1,15 @@
 # Video de obra para redes desde Revit (Dynamo + Python)
 
-Video vertical de unos 30 s (1080x1920, 30 fps, H.264) para Instagram, TikTok o Facebook. El
+Video vertical de unos 60 s (1080x1920, 30 fps, H.264) para Instagram, TikTok o Facebook. El
 modelo **estructural** de Revit 2025 se va "construyendo" por etapas de obra mientras la cámara
-gira. No usa Twinmotion, Enscape, Lumion ni pyRevit:
+gira, con el armado, las piedras de la mampostería y los blocks colocándose hilada por hilada.
+No usa Twinmotion, Enscape, Lumion ni pyRevit:
 
-1. **Revit + Dynamo** (`Video_Obra.dyn`) exporta los cuadros PNG desde una vista 3D.
-2. **Python en Windows** (`armar_video.py`) une los PNG en el MP4 con rótulos y tarjeta final.
+1. **Revit + Dynamo** (`Piezas_Obra.dyn`, opcional) crea los blocks y las piedras en una **copia**
+   del modelo.
+2. **Revit + Dynamo** (`Video_Obra.dyn`) exporta los cuadros PNG desde una vista 3D.
+3. **Python en Windows** (`armar_video.py`) une los PNG en el MP4 con texto gancho, rótulos y
+   tarjeta final.
 
 El repositorio no contiene datos de ningún proyecto ni cliente: el modelo de prueba es una casa
 sintética generada por código (`mock/modelo_sintetico.py`).
@@ -16,11 +20,13 @@ sintética generada por código (`mock/modelo_sintetico.py`).
 |---|---|
 | `nodo_video.py` | Código del nodo Python de Dynamo (Revit 2025, CPython3, pythonnet 2.5). |
 | `Video_Obra.dyn` | Grafo de Dynamo con el nodo y sus 6 entradas editables. Se genera con `generar_dyn.py`. |
+| `nodo_piezas.py` | Nodo Python de Dynamo que crea blocks y piedras (DirectShape) en la copia `...VIDEO...` del modelo. |
+| `Piezas_Obra.dyn` | Grafo de Dynamo con `nodo_piezas.py` y sus 6 entradas (medidas del block, junta, piedras, borrar). |
 | `armar_video.py` | Une los PNG en un MP4 1080x1920, 30 fps, H.264 yuv420p, con rótulos y tarjeta final. |
 | `previa.py` | Previa sin Revit: corre el mismo nodo contra el simulador y dibuja cajas con matplotlib. |
 | `probar.py` | Pruebas de punta a punta contra el simulador. |
 | `mock/` | Simulador mínimo de la API de Revit y modelo sintético. |
-| `generar_dyn.py` | Vuelve a generar `Video_Obra.dyn` con el código actual de `nodo_video.py`. |
+| `generar_dyn.py` | Vuelve a generar los dos `.dyn` con el código actual de los nodos. |
 | `requirements.txt` | Paquetes de Python para armar el video y la previa. |
 
 ## Preparación (una sola vez)
@@ -43,8 +49,9 @@ python previa.py
 
 Genera `salida_previa/previa.mp4` (540x960) con la misma secuencia, el mismo guion y la misma cámara
 que el nodo, sobre el modelo sintético. Agrega `--gif` para tener también un GIF, o cambia los
-parámetros con `--grados 360`, `--duracion 20` o `--sin-acero`. Con el armado tarda alrededor de
-1.5 minutos (medido en Linux).
+parámetros con `--grados 360`, `--duracion 30`, `--sin-acero` o `--sin-piezas`. Primero corre
+`nodo_piezas.py` sobre el modelo sintético, así que la previa muestra los blocks y las piedras.
+Con piezas y armado tarda alrededor de 8 minutos (medido en Linux).
 
 ### 2. Preparar la vista 3D base en Revit
 
@@ -58,17 +65,50 @@ parámetros con `--grados 360`, `--duracion 20` o `--sin-acero`. Con el armado t
 - El acero no hay que prepararlo: el nodo activa "Ver sin obstrucciones" y "Ver como sólido" solo en
   la vista `VIDEO OBRA` y le pone nivel de detalle Alto (ver "El armado" más abajo).
 
-### 3. Abrir y ejecutar el grafo
+### 3. Crear los blocks y las piedras (en una copia del modelo)
 
-1. En Revit: **Gestionar → Dynamo**. Abre `Video_Obra.dyn`.
+En Revit un muro es un solo sólido. Para ver cómo se colocan los blocks y las piedras, hay que
+crearlos como piezas:
+
+1. **Guarda una copia** del modelo con "VIDEO" en el nombre, por ejemplo `MODELO_VIDEO.rvt`. El nodo
+   se niega a trabajar en un archivo sin "VIDEO" en el nombre, para no tocar tu modelo original.
+2. En la copia: **Gestionar → Dynamo** y abre `Piezas_Obra.dyn`. Revisa las entradas:
+
+| Entrada | Por defecto | Qué hace |
+|---|---|---|
+| Largo del block (cm) | 40 | Medida nominal con junta: se dibuja de 39 cm. |
+| Alto del block (cm) | 20 | Medida nominal con junta: se dibuja de 19 cm. |
+| Espesor del block (cm) | 12 | Espesor del block, centrado en el muro. |
+| Junta (cm) | 1 | Junta de mortero entre blocks. |
+| Piedras en mampostería | True | Convierte los cimientos de piedra en piedras sobre camas de mortero. |
+| Solo borrar piezas | False | True: borra las piezas creadas antes y no crea nuevas. |
+
+3. Pulsa **Ejecutar**. La salida es un resumen: piezas por muro y muros omitidos (por ejemplo,
+   los curvos).
+
+**Qué muros convierte:** los que tienen "block", "bloque", "tabique", "tabicón" o "ladrillo" en el
+tipo, la familia o el material se convierten en blocks. Los de "piedra", "roca", "mampostería" o
+"braza" se convierten en piedras. Los de concreto o cisterna no se tocan. Las hiladas van
+cuatrapeadas y se cortan donde hay castillos, columnas, dalas, cerramientos, puertas o ventanas.
+Las piedras son de tamaño variable (25 a 45 cm de largo, 20 a 30 cm de alto), dos en el espesor y
+siempre con la misma semilla, así que cada corrida da las mismas piedras.
+
+Volver a ejecutarlo borra las piezas anteriores y las crea de nuevo; no se duplican. Cada pieza es
+un DirectShape (Modelo genérico) con `ApplicationId = "VIDEO_OBRA"`. Así el nodo de video las
+reconoce y el nodo de piezas solo borra las suyas. Una casa de dos niveles da del orden de 5000
+piezas; crearlas en Revit puede tardar unos minutos (no lo he medido).
+
+### 4. Abrir y ejecutar el grafo del video
+
+1. En Revit (en la copia, si creaste piezas): **Gestionar → Dynamo**. Abre `Video_Obra.dyn`.
 2. Edita los nodos de entrada (a la izquierda):
 
 | Entrada | Por defecto | Qué hace |
 |---|---|---|
 | Carpeta de salida | `C:\VIDEO_OBRA\cuadros` | Dónde se guardan los PNG, el guion y el informe. Se crea si no existe. |
 | Vista 3D base | `{3D}` | Nombre exacto de la vista isométrica base. |
-| FPS de exportación | 15 | 15 × 30 s = 450 cuadros. Con 10 tarda menos; con 30 se ve más fluido. |
-| Duración (s) | 30 | Duración total del video. |
+| FPS de exportación | 15 | 15 × 60 s = 900 cuadros. Con 10 tarda menos; con 30 se ve más fluido. |
+| Duración (s) | 60 | Duración total del video. |
 | Grados de giro | 180 | Giro total de la cámara. |
 | Incluir acero | True | Agrega el armado: varillas, barras de refuerzo de área o de camino, mallas y acopladores. |
 
@@ -80,14 +120,15 @@ parámetros con `--grados 360`, `--duracion 20` o `--sin-acero`. Con el armado t
    **ERRORES**.
 
 **Cuánto tarda:** no lo he medido en Revit. `ExportImage` de una imagen de 1920 px suele tardar entre
-1 y 4 s según el modelo y el estilo visual, así que 450 cuadros serían aproximadamente de 8 a 30 min.
+1 y 4 s según el modelo y el estilo visual (con miles de piezas y varillas, más). Así que 900 cuadros
+serían aproximadamente de 15 a 60 min.
 Después de la primera corrida, el informe trae el tiempo real por cuadro (promedio, mínimo y máximo).
 
 **Si Revit se cierra a media exportación:** vuelve a abrir el modelo y ejecuta el grafo otra vez. Los
 cuadros que ya existen se saltan y solo se exportan los que faltan. Si no habías guardado, la vista
 `VIDEO OBRA` se vuelve a crear; si existe, se reutiliza.
 
-### 4. Armar el MP4
+### 5. Armar el MP4
 
 ```
 python armar_video.py C:\VIDEO_OBRA\cuadros --marca "TU MARCA"
@@ -99,7 +140,12 @@ Linux; en Windows no lo he medido). Opciones:
 - `--salida ruta.mp4` para guardar el video en otro lugar.
 - `--subtexto "Estructura · 2 niveles"` agrega una segunda línea a la tarjeta.
 - `--modo duplicar` repite cuadros en vez de mezclarlos (por defecto se mezclan).
+- `--gancho "Así se construye una casa"` cambia el texto del inicio (`--gancho ""` lo quita).
 - `--sin-rotulos` y `--sin-tarjeta` quitan los textos.
+
+**Para que funcione en redes:** el texto gancho aparece desde el primer cuadro (en los primeros 2-3 s
+se decide si la gente se queda) y la tarjeta final cierra con tu marca. El video sale sin música:
+agrégala en Instagram o TikTok con un audio en tendencia, que esas apps priorizan.
 
 Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VIDEO OBRA.png`).
 `armar_video.py` ordena los cuadros por su número sin depender de ese texto y los renombra a
@@ -148,9 +194,16 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
 - **Tiempo de cada grupo:** cada pieza aparece al inicio de su intervalo de tiempo. Cada grupo (un
   nivel y una etapa, armado o concreto) dura al menos 0.7 s (`MIN_SEG_GRUPO`) aunque tenga pocos
   elementos. Si hay muchos grupos, ese mínimo baja para que todo quepa en el tiempo de obra.
-- **Guion (30 s):** de 0 a 1.5 s solo se ve el terreno; de 1.5 a 24 s avanza la construcción; de
-  24 a 30 s se ve la estructura completa mientras termina el giro. Los tiempos son fracciones de la
-  duración, así que se escalan si cambias la duración.
+- **Guion (60 s):** de 0 a 1.5 s solo se ve el terreno (con el texto gancho encima); de 1.5 a 54 s
+  avanza la construcción; los últimos 6 s muestran la estructura completa mientras termina el giro, y
+  en el último segundo y medio entra la tarjeta final. Los tiempos están en segundos
+  (`SEG_SOLO_TERRENO`, `SEG_REMATE`); en videos muy cortos se limitan al 5 % y al 20 % de la duración.
+- **Blocks y piedras:** si la copia tiene piezas de `nodo_piezas.py`, el muro sólido queda oculto
+  todo el video y en su lugar se colocan sus piezas, en la etapa del muro. Todas las hiladas de los
+  muros del nivel suben juntas, como en obra: primero la hilada 1 de todos los muros, luego la 2, y
+  así. En la mampostería, la cama de mortero de cada hilada va antes que sus piedras. Un muro en
+  piezas dura como 4 elementos normales (`PESO_MURO_EN_PIEZAS`). Las piezas de un muro que no está
+  en la secuencia (por ejemplo, oculto en la vista base) quedan ocultas.
 - **Cámara:** isométrica a 30° de elevación. Gira alrededor del centro de la BoundingBox total con
   `SetOrientation`, con arranque y final suaves. La caja de recorte es 9:16, de tamaño fijo (sin
   zoom durante el giro) y con 8 % de margen. Exporta PNG de 1920 px de alto (1080 de ancho).
@@ -193,7 +246,15 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
   `ACERO_SE_TAPA_AL_COLAR`, `VER_ACERO_COMO_SOLIDO`, `NIVEL_DETALLE_ALTO` y `CATEGORIAS_ACERO`.
 - Cámara: `ELEVACION_GRADOS`, `AZIMUT_INICIAL_GRADOS`, `SUAVIZAR_GIRO`, `MARGEN_ENCUADRE` (bájalo,
   o ponlo negativo, para acercar la cámara).
-- Guion: `FRACCION_INICIO_OBRA` y `FRACCION_FIN_OBRA`.
+- Guion: `SEG_SOLO_TERRENO` y `SEG_REMATE`. Piezas: `PESO_MURO_EN_PIEZAS`.
+
+### En `nodo_piezas.py` (bloque "PARÁMETROS EDITABLES")
+
+- `PALABRAS_BLOCK`, `PALABRAS_PIEDRA` y `PALABRAS_EXCLUIR`: qué muros se convierten.
+- `CATEGORIAS_OBSTACULO`: lo que corta las hiladas.
+- Piedra: `PIEDRA_ALTO`, `PIEDRA_LARGO`, `PIEDRA_JUNTA`, `PIEDRAS_A_LO_ANCHO`, `MORTERO_RETIRO`,
+  `MORTERO_ALTO` (la cama de mortero llega al 60 % de la hilada para que las piedras sobresalgan) y
+  `SEMILLA`.
 - `CATEGORIAS_OCULTAS_SIEMPRE`.
 
 **Después de editar `nodo_video.py`**, ejecuta `python generar_dyn.py` para regenerar el `.dyn`, o
@@ -209,8 +270,9 @@ copia el código directamente dentro del nodo Python en Dynamo.
 - `ROTULOS_ARMADO`: texto mientras aparece el acero ("Armado de cimentación", "Armado de castillos y
   columnas", "Armado de trabes y cadenas", "Armado de losa"...). En niveles superiores:
   `ROTULO_ARMADO_PLANTA_ALTA` y `ROTULO_ARMADO_AZOTEA`.
-- Posición y tamaño del rótulo: `ROTULO_Y` y `ROTULO_TAM`. Tarjeta final: `TARJETA_TEXTO`,
-  `TARJETA_SEG`, colores y tamaño.
+- Posición y tamaño del rótulo: `ROTULO_Y` y `ROTULO_TAM`. Texto gancho: `TEXTO_GANCHO`,
+  `GANCHO_SEG`, `GANCHO_Y` y `GANCHO_TAM`. Tarjeta final: `TARJETA_TEXTO`, `TARJETA_SEG`, colores y
+  tamaño.
 - Tipografías: `FUENTES_NORMAL` y `FUENTES_NEGRITA`. En Windows usa Segoe UI y, si no está, Arial.
 - Calidad: `CRF` (18 por defecto) y `MODO_INTERPOLACION`.
 
@@ -235,6 +297,8 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
   - losa de azotea.
 - **Azotea y exteriores:** pretiles, base de tinaco y tinaco, banqueta y patio exterior.
 - **Otros:** escalera, terreno con excavación, una puerta y un muro oculto en la vista base.
+- **Piezas:** las pruebas que las usan corren antes `nodo_piezas.py` sobre el modelo (cuyo nombre
+  lleva "VIDEO"): unos 4100 blocks, 560 piedras y 22 camas de mortero.
 - **Acero:**
   - varillas y estribos en columnas, castillos, cadenas y trabes;
   - parrillas en cimientos y dados;
@@ -245,7 +309,8 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
 
 ### Qué está probado (en el simulador, en Linux)
 
-- El nodo corre de punta a punta, exporta 450 cuadros y devuelve la ruta del informe sin errores.
+- El nodo corre de punta a punta (en las pruebas, 30 s a 15 fps: 450 cuadros) y devuelve la ruta del
+  informe sin errores.
 - No cambia la geometría ni borra ningún elemento del modelo. Solo crea una vista nueva y deja
   intacta la vista base (elementos ocultos, orientación y recorte). Los únicos ajustes sobre
   elementos son los gráficos del acero, y solo en la vista de video.
@@ -281,9 +346,26 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
   los 119 cuadros hechos y exporta los 331 restantes. Los cuadros reanudados son idénticos byte a
   byte a los de una corrida sin cortes. Una tercera corrida reutiliza la vista y no exporta nada.
 - Un error en un cuadro queda en el informe con su traceback, y la siguiente corrida lo completa.
+- Piezas (`nodo_piezas.py`):
+  - no hace nada si el archivo no tiene "VIDEO" en el nombre;
+  - convierte los muros de block y de piedra (la piedra la reconoce por el material) y no toca la
+    cisterna ni el concreto;
+  - los blocks miden 39 x 19 x 12 cm y van 13 hiladas en un muro de 2.6 m;
+  - las hiladas van cuatrapeadas, y la que ocupa la dala no lleva blocks;
+  - ninguna pieza invade castillos, columnas, dalas, cerramientos ni la puerta, y las piezas no se
+    enciman entre sí;
+  - no modifica ningún elemento existente;
+  - volver a correrlo no duplica, y "Solo borrar" deja cero piezas.
+- Video con piezas:
+  - ningún muro sólido sustituido ni pieza huérfana se ve en ningún cuadro;
+  - en planta baja, planta alta y mampostería, cada hilada termina antes de que empiece la
+    siguiente, y el mortero de cada hilada va antes que sus piedras;
+  - los blocks aparecen después de los castillos y antes de las trabes, y las piedras después de
+    los dados y antes de la cisterna.
 - Una vista base inexistente o en perspectiva produce un informe con el error, sin exportar nada.
-- `Video_Obra.dyn` es JSON válido. Su nodo Python tiene `"Engine": "CPython3"`, un código idéntico a
-  `nodo_video.py` y 6 entradas conectadas del tipo correcto, con el acero activado por defecto.
+- `Video_Obra.dyn` y `Piezas_Obra.dyn` son JSON válido. Su nodo Python tiene `"Engine": "CPython3"`,
+  un código idéntico a su `.py` y 6 entradas conectadas del tipo correcto. Por defecto, el video
+  dura 60 s con el acero activado, y las piezas son block 40x20x12 con junta de 1 cm.
 - `armar_video.py` genera un MP4 H.264 yuv420p de 1080x1920, 30 fps, 900 cuadros y 30.0 s. También
   ordena y renombra los PNG sin depender del sufijo de Revit. Los rótulos salen en orden. Sin acero:
   Cimentación → Cimiento de mampostería → Cisterna → Cimentación → Firme → Castillos y columnas →
@@ -352,6 +434,20 @@ cómo se comportan en Revit 2025 las siguientes llamadas:
 - Que Dynamo 3.x de Revit 2025 abra `Video_Obra.dyn` sin advertencias. El JSON sigue el formato
   de Dynamo, pero no se ha abierto en Dynamo.
 - Cómo se ve en Revit el terreno sobre la cimentación.
+- Piezas, todo `nodo_piezas.py` en Revit:
+  - `DirectShape.CreateElement(doc, ElementId(BuiltInCategory.OST_GenericModel))`;
+  - asignar y leer `ApplicationId` y `ApplicationDataId`. Al leerlos, pythonnet 2.5 debe entregar
+    el elemento como `DirectShape`;
+  - `SetShape(List[GeometryObject])`;
+  - `CurveLoop.Append`, `Line.CreateBound` y
+    `GeometryCreationUtilities.CreateExtrusionGeometry(..., SolidOptions(material, ...))`;
+  - `Wall.Location.Curve`, `Wall.Width` y `doc.Delete(List[ElementId])`;
+  - `FilteredElementCollector(doc).OfClass(DirectShape)`;
+  - `doc.Title` y `doc.PathName` para la revisión de "VIDEO";
+  - cuánto tarda Revit en crear unas 5000 piezas y en exportar cuadros con ellas;
+  - que las piezas tomen el material del muro en la imagen;
+  - que en muros con uniones en esquina, en "L" o en "T", o con otro eje de ubicación, los blocks
+    no se encimen. En el simulador los muros son cajas rectas.
 - Que tus viguetas midan como máximo 13 cm de ancho y 20 cm de peralte (o que su nombre diga
   "vigueta"), y que ninguna cadena o dala sea tan chica (si no, se tomaría por vigueta). La sección
   TIPOS DE REVIT POR ETAPA del informe lo muestra.

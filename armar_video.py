@@ -96,6 +96,15 @@ ROTULO_COLOR_FONDO = (20, 22, 26, 150)
 ROTULO_COLOR_TEXTO = (255, 255, 255, 255)
 
 # Tarjeta final (sustituye los últimos segundos del video)
+# Texto gancho al inicio (lo primero que se ve: decide si la gente se queda)
+TEXTO_GANCHO = "De terreno a casa, pieza por pieza"
+GANCHO_SEG = 2.8                     # cuánto dura en pantalla
+GANCHO_FUNDIDO_S = 0.5               # desvanecido al final
+GANCHO_Y = 0.15                      # centro vertical (fracción del alto)
+GANCHO_TAM = 0.040                   # tamaño de letra (fracción del alto: 77 px en 1920)
+GANCHO_COLOR = (255, 255, 255)
+GANCHO_CONTORNO = (20, 22, 26)
+
 TARJETA = True
 TARJETA_TEXTO = "TU MARCA"
 TARJETA_SUBTEXTO = ""
@@ -278,6 +287,32 @@ class Rotulador(object):
         return cuadro
 
 
+def imagen_gancho(tam, texto):
+    """Texto grande con contorno, en varias líneas si no cabe (RGBA del tamaño del cuadro)."""
+    img = Image.new("RGBA", tam, (0, 0, 0, 0))
+    if not texto:
+        return None
+    d = ImageDraw.Draw(img)
+    f = fuente(GANCHO_TAM * tam[1], negrita=True)
+    palabras, lineas, actual = texto.split(), [], ""
+    for w in palabras:
+        prueba = (actual + " " + w).strip()
+        if d.textlength(prueba, font=f) <= 0.86 * tam[0] or not actual:
+            actual = prueba
+        else:
+            lineas.append(actual)
+            actual = w
+    lineas.append(actual)
+    alto_linea = GANCHO_TAM * tam[1] * 1.2
+    y0 = GANCHO_Y * tam[1] - alto_linea * (len(lineas) - 1) / 2.0
+    contorno = max(2, int(GANCHO_TAM * tam[1] * 0.08))
+    for i, linea in enumerate(lineas):
+        d.text((tam[0] / 2.0, y0 + i * alto_linea), linea, font=f, fill=GANCHO_COLOR + (255,),
+               anchor="mm", stroke_width=contorno, stroke_fill=GANCHO_CONTORNO + (255,))
+    arr = np.asarray(img, dtype=np.float32)
+    return arr[:, :, :3], arr[:, :, 3:4] / 255.0
+
+
 def imagen_tarjeta(tam, texto, subtexto):
     img = Image.new("RGB", tam, TARJETA_COLOR_FONDO)
     d = ImageDraw.Draw(img)
@@ -300,7 +335,7 @@ def imagen_tarjeta(tam, texto, subtexto):
 #  ARMADO
 # =============================================================================
 
-def armar(carpeta, salida=None, fps_entrada=None, marca=TARJETA_TEXTO, subtexto=TARJETA_SUBTEXTO,
+def armar(carpeta, salida=None, fps_entrada=None, marca=TARJETA_TEXTO, subtexto=TARJETA_SUBTEXTO, gancho=TEXTO_GANCHO,
           modo=MODO_INTERPOLACION, tam=(ANCHO, ALTO), fps_salida=FPS_SALIDA, rotulos=True,
           tarjeta=TARJETA, renombrar=True, gif=None, gif_fps=10, progreso=True):
     """Arma el video. Devuelve un dict con el resumen."""
@@ -333,6 +368,7 @@ def armar(carpeta, salida=None, fps_entrada=None, marca=TARJETA_TEXTO, subtexto=
     n_salida = int(round(duracion * fps_salida))
     t_tarjeta = duracion - TARJETA_SEG
     img_tarjeta = imagen_tarjeta(tam, marca, subtexto) if tarjeta else None
+    img_gancho = imagen_gancho(tam, gancho) if gancho else None
 
     cache = {}
 
@@ -368,6 +404,12 @@ def armar(carpeta, salida=None, fps_entrada=None, marca=TARJETA_TEXTO, subtexto=
             opacidad = min(1.0, (t - t_cambio) / ROTULO_FUNDIDO_S) if ROTULO_FUNDIDO_S > 0 else 1.0
             f = rotulador.aplicar(f, texto_actual, opacidad)
 
+            if img_gancho is not None and t < GANCHO_SEG:
+                k = min(1.0, (GANCHO_SEG - t) / GANCHO_FUNDIDO_S) if GANCHO_FUNDIDO_S > 0 else 1.0
+                rgb, alfa = img_gancho
+                a = alfa * k
+                f = (f.astype(np.float32) * (1 - a) + rgb * a + 0.5).astype(np.uint8)
+
             if img_tarjeta is not None and t >= t_tarjeta:
                 k = min(1.0, (t - t_tarjeta) / TARJETA_FUNDIDO_S) if TARJETA_FUNDIDO_S > 0 else 1.0
                 f = (f.astype(np.float32) * (1 - k) + img_tarjeta.astype(np.float32) * k
@@ -398,6 +440,7 @@ def main(argv=None):
     ap.add_argument("--fps-entrada", type=float, help="FPS de exportación si no hay guion_video.json")
     ap.add_argument("--marca", default=TARJETA_TEXTO, help="Texto de la tarjeta final")
     ap.add_argument("--subtexto", default=TARJETA_SUBTEXTO, help="Segunda línea de la tarjeta final")
+    ap.add_argument("--gancho", default=TEXTO_GANCHO, help='Texto del inicio ("" para quitarlo)')
     ap.add_argument("--modo", choices=["mezclar", "duplicar"], default=MODO_INTERPOLACION)
     ap.add_argument("--sin-rotulos", action="store_true")
     ap.add_argument("--sin-tarjeta", action="store_true")
@@ -405,7 +448,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     r = armar(args.carpeta, salida=args.salida, fps_entrada=args.fps_entrada, marca=args.marca,
-              subtexto=args.subtexto, modo=args.modo, rotulos=not args.sin_rotulos,
+              subtexto=args.subtexto, gancho=args.gancho, modo=args.modo, rotulos=not args.sin_rotulos,
               tarjeta=not args.sin_tarjeta, renombrar=not args.no_renombrar)
     print("Video: %s" % r["salida"])
     print("Cuadros: %d de entrada a %g fps -> %d de salida a %d fps (%.1f s), en %.1f s"

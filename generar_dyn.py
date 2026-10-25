@@ -1,33 +1,63 @@
 # -*- coding: utf-8 -*-
-"""Genera Video_Obra.dyn (Dynamo 3.x para Revit 2025) con el código de nodo_video.py incrustado.
+"""Genera los grafos de Dynamo 3.x para Revit 2025 con el código de cada nodo incrustado:
 
-Si editas nodo_video.py, vuelve a correr:   python generar_dyn.py
-Así el código del grafo queda idéntico al del archivo (probar.py lo comprueba).
+    Video_Obra.dyn   <- nodo_video.py   (exporta los cuadros del video)
+    Piezas_Obra.dyn  <- nodo_piezas.py  (crea blocks y piedras en la copia del modelo)
+
+Si editas un nodo, vuelve a correr:   python generar_dyn.py
+Así el código de cada grafo queda idéntico al del archivo (probar.py lo comprueba).
 """
 import json
 import os
 import uuid
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-RUTA_NODO = os.path.join(AQUI, "nodo_video.py")
-RUTA_DYN = os.path.join(AQUI, "Video_Obra.dyn")
 VERSION_DYNAMO = "3.0.3.7597"
 
-# Entradas editables: (nombre visible, tipo, valor por defecto, descripción)
-ENTRADAS = [
-    ("Carpeta de salida", "texto", r"C:\VIDEO_OBRA\cuadros", "Carpeta donde se guardan los PNG y el informe"),
-    ("Vista 3D base", "texto", "{3D}", "Nombre exacto de la vista 3D isométrica base"),
-    ("FPS de exportación", "numero", 15.0, "Cuadros por segundo que exporta Revit (15 = 450 cuadros en 30 s)"),
-    ("Duración (s)", "numero", 30.0, "Duración del video en segundos"),
-    ("Grados de giro", "numero", 180.0, "Giro total de la cámara alrededor de la estructura"),
-    ("Incluir acero", "booleano", True,
-     "Incluir el acero: varillas, barras de refuerzo de área/camino y mallas (armado antes del concreto)"),
+# Entradas editables de cada grafo: (nombre visible, tipo, valor por defecto, descripción)
+GRAFOS = [
+    {
+        "prefijo": "video-obra/",
+        "nodo": "nodo_video.py",
+        "dyn": "Video_Obra.dyn",
+        "nombre": "Video_Obra",
+        "titulo_nodo": "VIDEO DE OBRA (exporta cuadros)",
+        "descripcion": "Exporta cuadros PNG de la obra por etapas con giro de cámara, para un video vertical.",
+        "entradas": [
+            ("Carpeta de salida", "texto", r"C:\VIDEO_OBRA\cuadros", "Carpeta donde se guardan los PNG y el informe"),
+            ("Vista 3D base", "texto", "{3D}", "Nombre exacto de la vista 3D isométrica base"),
+            ("FPS de exportación", "numero", 15.0, "Cuadros por segundo que exporta Revit (15 = 900 cuadros en 60 s)"),
+            ("Duración (s)", "numero", 60.0, "Duración del video en segundos"),
+            ("Grados de giro", "numero", 180.0, "Giro total de la cámara alrededor de la estructura"),
+            ("Incluir acero", "booleano", True,
+             "Incluir el acero: varillas, barras de refuerzo de área/camino y mallas (armado antes del concreto)"),
+        ],
+    },
+    {
+        "prefijo": "piezas-obra/",
+        "nodo": "nodo_piezas.py",
+        "dyn": "Piezas_Obra.dyn",
+        "nombre": "Piezas_Obra",
+        "titulo_nodo": "PIEZAS DE OBRA (blocks y piedras, solo en copia VIDEO)",
+        "descripcion": "Crea blocks y piedras como DirectShape para el video, solo en una copia del modelo "
+                       "cuyo nombre contenga VIDEO.",
+        "entradas": [
+            ("Largo del block (cm)", "numero", 40.0, "Medida nominal, con junta"),
+            ("Alto del block (cm)", "numero", 20.0, "Medida nominal, con junta"),
+            ("Espesor del block (cm)", "numero", 12.0, "Espesor del block"),
+            ("Junta (cm)", "numero", 1.0, "Junta de mortero entre blocks"),
+            ("Piedras en mampostería", "booleano", True, "Convertir los cimientos de piedra en piedras"),
+            ("Solo borrar piezas", "booleano", False, "True: borra las piezas creadas antes y no crea nuevas"),
+        ],
+    },
 ]
+
+_PREFIJO = ["video-obra/"]
 
 
 def _gid(texto):
     """GUID estable (sin guiones, como los escribe Dynamo)."""
-    return uuid.uuid5(uuid.NAMESPACE_URL, "video-obra/" + texto).hex
+    return uuid.uuid5(uuid.NAMESPACE_URL, _PREFIJO[0] + texto).hex
 
 
 def _puerto(gid, nombre, descripcion):
@@ -62,14 +92,15 @@ def _nodo_entrada(i, nombre, tipo, valor, descripcion):
     return nodo, salida, entrada_jugador, vista
 
 
-def generar():
-    with open(RUTA_NODO, encoding="utf-8") as f:
+def generar_grafo(g):
+    _PREFIJO[0] = g["prefijo"]
+    with open(os.path.join(AQUI, g["nodo"]), encoding="utf-8") as f:
         codigo = f.read()
 
     nodos, conectores, jugador, vistas = [], [], [], []
     py_id = _gid("python")
     py_entradas = []
-    for i, (nombre, tipo, valor, desc) in enumerate(ENTRADAS):
+    for i, (nombre, tipo, valor, desc) in enumerate(g["entradas"]):
         nodo, salida, ent, vista = _nodo_entrada(i, nombre, tipo, valor, desc)
         nodos.append(nodo)
         jugador.append(ent)
@@ -92,15 +123,15 @@ def generar():
         "Replication": "Disabled",
         "Description": "Runs an embedded Python script.",
     })
-    vistas.append({"Id": py_id, "Name": "VIDEO DE OBRA (exporta cuadros)", "IsSetAsInput": False,
+    vistas.append({"Id": py_id, "Name": g["titulo_nodo"], "IsSetAsInput": False,
                    "IsSetAsOutput": True, "Excluded": False, "ShowGeometry": True,
                    "X": 520.0, "Y": 300.0})
 
     grafo = {
         "Uuid": _gid("grafo"),
         "IsCustomNode": False,
-        "Description": "Exporta cuadros PNG de la obra por etapas con giro de cámara, para un video vertical.",
-        "Name": "Video_Obra",
+        "Description": g["descripcion"],
+        "Name": g["nombre"],
         "ElementResolver": {"ResolutionMap": {}},
         "Inputs": jugador,
         "Outputs": [],
@@ -128,10 +159,16 @@ def generar():
             "Zoom": 0.9,
         },
     }
-    with open(RUTA_DYN, "w", encoding="utf-8", newline="\n") as f:
+    ruta = os.path.join(AQUI, g["dyn"])
+    with open(ruta, "w", encoding="utf-8", newline="\n") as f:
         json.dump(grafo, f, ensure_ascii=False, indent=2)
-    return RUTA_DYN
+    return ruta
+
+
+def generar():
+    return [generar_grafo(g) for g in GRAFOS]
 
 
 if __name__ == "__main__":
-    print("Generado:", generar())
+    for ruta in generar():
+        print("Generado:", ruta)

@@ -11,7 +11,7 @@
 #    IN[0]  Carpeta de salida (texto)
 #    IN[1]  Nombre de la vista 3D base (texto, isométrica, NO perspectiva)
 #    IN[2]  Cuadros por segundo de exportación (número, 15 por defecto)
-#    IN[3]  Duración del video en segundos (número, 30 por defecto)
+#    IN[3]  Duración del video en segundos (número, 60 por defecto)
 #    IN[4]  Grados de giro de la cámara (número, 180 por defecto)
 #    IN[5]  Incluir acero de refuerzo (booleano, True por defecto)
 #  Salida:
@@ -65,13 +65,14 @@ NOMBRE_GUION = "guion_video.json"  # lo lee armar_video.py para los rótulos
 CARPETA_DEFECTO = r"C:\VIDEO_OBRA\cuadros"
 VISTA_BASE_DEFECTO = "{3D}"
 FPS_DEFECTO = 15
-DURACION_DEFECTO = 30.0
+DURACION_DEFECTO = 60.0
 GRADOS_DEFECTO = 180.0
 ACERO_DEFECTO = True
 
-# Guion, como fracción de la duración (para 30 s: 1.5 s y 24 s)
-FRACCION_INICIO_OBRA = 1.5 / 30.0  # antes: solo terreno
-FRACCION_FIN_OBRA = 24.0 / 30.0    # después: estructura completa terminando el giro
+# Guion en segundos: al inicio solo el terreno; al final, la estructura completa
+# terminando el giro. En videos muy cortos se limitan al 5 % y al 20 % de la duración.
+SEG_SOLO_TERRENO = 1.5
+SEG_REMATE = 6.0
 
 # Cámara isométrica
 ELEVACION_GRADOS = 30.0        # ángulo de la cámara sobre la horizontal
@@ -102,6 +103,11 @@ VER_ACERO_SIN_OBSTRUCCION = True  # "Ver sin obstrucciones" en la vista de video
 VER_ACERO_COMO_SOLIDO = True      # "Ver como sólido" en la vista de video
 ACERO_SE_TAPA_AL_COLAR = True     # al aparecer el concreto, su armado vuelve a quedar "obstruido"
 NIVEL_DETALLE_ALTO = True         # nivel de detalle Alto en la vista de video
+
+# Piezas de obra (blocks y piedras) creadas por nodo_piezas.py en la copia del modelo:
+# DirectShape con este ApplicationId. Sustituyen a su muro y se colocan hilada por hilada.
+APLICACION_PIEZAS = "VIDEO_OBRA"
+PESO_MURO_EN_PIEZAS = 4.0   # un muro en piezas dura como 4 elementos normales
 
 # Exportación
 MAX_ERRORES_SEGUIDOS = 5
@@ -356,6 +362,7 @@ class Pieza(object):
         self.texto = _sin_acentos(" | ".join([tipo, familia] + self.materiales))
         self.anfitrion = anfitrion
         self.cubre = None   # para el acero: clave del concreto que lo tapa al colarse
+        self.pieza = None   # (tipo, clave del muro, hilada) si es block/piedra de nodo_piezas.py
         self.nivel = 0
         self.orden = 0
         self.etapa = ""
@@ -549,6 +556,17 @@ def anfitrion_de(elemento):
     return k if k > 0 else None
 
 
+def datos_pieza(e):
+    """(tipo, clave del muro, hilada) de un block/piedra de nodo_piezas.py, o None."""
+    try:
+        if (e.ApplicationId or "") != APLICACION_PIEZAS:
+            return None
+        partes = (e.ApplicationDataId or "").split("|")
+        return partes[1], int(partes[2]), int(partes[3])
+    except Exception:
+        return None
+
+
 def recoger_piezas(doc, vista_base, incluir_acero, inf):
     categorias = list(CATEGORIAS_OBRA)
     if incluir_acero:
@@ -583,6 +601,10 @@ def recoger_piezas(doc, vista_base, incluir_acero, inf):
             if cat in CLAVES_ACERO:
                 piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e),
                                     anfitrion_de(e)))
+            elif datos_pieza(e) is not None:
+                p = Pieza(e, cat, etiqueta, caja, nombre_clase(e), "Pieza de obra (%s)" % datos_pieza(e)[0], None)
+                p.pieza = datos_pieza(e)
+                piezas.append(p)
             else:
                 piezas.append(Pieza(e, cat, etiqueta, caja, nombre_clase(e), nombre_tipo(doc, e), None,
                                     nombre_familia(doc, e), nombres_materiales(doc, e, cache_mat)))
@@ -693,12 +715,13 @@ def _reglas_compiladas():
     return reglas
 
 
-def _clave_base(p, sub):
-    """(nivel, orden de etapa, 0 armado / 1 concreto, banda de Z, barrido en planta, id)."""
+def _clave_base(p, sub, banda=None, rango=1):
+    """(nivel, orden de etapa, 0 armado / 1 concreto, banda de Z o hilada, rango, barrido, id)."""
     a = math.radians(DIRECCION_BARRIDO_GRADOS)
     barrido = p.cx * math.cos(a) + p.cy * math.sin(a)
-    banda = int(math.floor(p.zmin / BANDA_Z_PIES + 1e-9))
-    return (p.nivel, p.orden, sub, banda, round(barrido, 3), p.clave)
+    if banda is None:
+        banda = int(math.floor(p.zmin / BANDA_Z_PIES + 1e-9))
+    return (p.nivel, p.orden, sub, banda, rango, round(barrido, 3), p.clave)
 
 
 def _contenedor(p, concretos):
@@ -728,7 +751,7 @@ def ordenar_piezas(piezas, niveles, inf):
     por_clave = {}
     concretos = []
     for p in piezas:
-        if p.acero:
+        if p.acero or p.pieza is not None:
             continue
         p.orden, p.etapa = ETAPA_OTROS
         for orden, etapa, cat, prueba in reglas:
@@ -743,7 +766,45 @@ def ordenar_piezas(piezas, niveles, inf):
         p.clave_orden = _clave_base(p, 1)
         por_clave[p.clave] = p
         concretos.append(p)
-    piezas = [p for p in piezas if p.acero or p.etapa is not None]
+    piezas = [p for p in piezas if p.acero or p.pieza is not None or p.etapa is not None]
+
+    # Blocks y piedras: toman nivel y etapa de su muro y se colocan hilada por hilada
+    # (todas las hiladas del nivel suben juntas; el mortero de cada hilada va primero).
+    # El muro sólido queda oculto todo el video. Piezas de un muro que no está en la
+    # secuencia (por ejemplo, oculto en la vista base) también se ocultan.
+    reemplazados, huerfanas, muros_por_grupo = {}, 0, {}
+    for p in piezas:
+        if p.pieza is None:
+            continue
+        tipo, clave_muro, hilada = p.pieza
+        muro = por_clave.get(clave_muro)
+        if muro is None:
+            p.etapa = None
+            huerfanas += 1
+            continue
+        reemplazados[clave_muro] = muro
+        p.nivel, p.orden, p.etapa = muro.nivel, muro.orden, muro.etapa
+        p.clave_orden = _clave_base(p, 1, banda=hilada, rango=0 if tipo == "mortero" else 1)
+        muros_por_grupo.setdefault((p.nivel, p.orden), set()).add(clave_muro)
+    ocultar_siempre = [m for m in reemplazados.values()]
+    ocultar_siempre += [p for p in piezas if p.pieza is not None and p.etapa is None]
+    piezas = [p for p in piezas if p.clave not in reemplazados and not (p.pieza is not None and p.etapa is None)]
+    concretos = [p for p in concretos if p.clave not in reemplazados]
+    for clave in reemplazados:
+        por_clave.pop(clave, None)
+    grupo_piezas = {}
+    for p in piezas:
+        if p.pieza is not None:
+            grupo_piezas.setdefault((p.nivel, p.orden), []).append(p)
+    for g, lista in grupo_piezas.items():
+        total = PESO_MURO_EN_PIEZAS * len(muros_por_grupo[g])
+        for p in lista:
+            p.peso = total / len(lista)
+    if reemplazados:
+        inf.nota("Muros sustituidos por piezas (blocks/piedras): %d; piezas en la secuencia: %d."
+                 % (len(reemplazados), sum(len(v) for v in grupo_piezas.values())))
+    if huerfanas:
+        inf.nota("%d piezas de muros que no están en la secuencia: quedan ocultas." % huerfanas)
 
     # Acero: toma nivel y etapa de su anfitrión (o del concreto que lo contiene)
     # y va en el grupo "armado" (sub = 0), antes de todo el concreto de la etapa.
@@ -783,7 +844,7 @@ def ordenar_piezas(piezas, niveles, inf):
                 p.peso = total / len(armado)
 
     piezas.sort(key=lambda p: p.clave_orden)
-    return piezas
+    return piezas, ocultar_siempre
 
 
 def contar(piezas, inf):
@@ -821,8 +882,8 @@ def asegurar_minimo(piezas, fraccion):
 
 def construir_guion(piezas, cfg):
     n = int(round(cfg.duracion * cfg.fps))
-    t_ini = FRACCION_INICIO_OBRA * cfg.duracion
-    t_fin = FRACCION_FIN_OBRA * cfg.duracion
+    t_ini = min(SEG_SOLO_TERRENO, 0.05 * cfg.duracion)
+    t_fin = cfg.duracion - min(SEG_REMATE, 0.2 * cfg.duracion)
     if t_fin > t_ini:
         asegurar_minimo(piezas, MIN_SEG_GRUPO / (t_fin - t_ini))
     # Cada pieza aparece al INICIO de su intervalo de tiempo y su rótulo dura todo el
@@ -962,7 +1023,7 @@ def mostrar_acero(vista, piezas_acero, inf):
         inf.nota("Acero con ajuste de vista fallido (%d), primeros: %s" % (len(fallas), "; ".join(fallas[:5])))
 
 
-def preparar_vista(doc, vista_base, piezas, incluir_acero, inf):
+def preparar_vista(doc, vista_base, piezas, incluir_acero, inf, ocultar_siempre=()):
     """Crea o reutiliza VIDEO OBRA y deja ocultas todas las piezas de la secuencia."""
     vista = buscar_vista_3d(doc, NOMBRE_VISTA_VIDEO)
     TransactionManager.Instance.EnsureInTransaction(doc)
@@ -1011,7 +1072,8 @@ def preparar_vista(doc, vista_base, piezas, incluir_acero, inf):
                                     % (p.clave, p.etiqueta_cat))
         if incluir_acero:
             mostrar_acero(vista, [p for p in ocultables if p.acero], inf)
-        a_ocultar = [p.eid for p in ocultables if not p.elemento.IsHidden(vista)]
+        fijos = [p for p in ocultar_siempre if p.elemento.CanBeHidden(vista)]
+        a_ocultar = [p.eid for p in ocultables + fijos if not p.elemento.IsHidden(vista)]
         if a_ocultar:
             vista.HideElements(lista_ids(a_ocultar))
         doc.Regenerate()
@@ -1164,8 +1226,8 @@ def ejecutar(entradas):
         piezas = recoger_piezas(doc, vista_base, cfg.acero, inf)
         if not piezas:
             raise ValueError("No se encontraron elementos estructurales visibles en la vista base.")
-        piezas = ordenar_piezas(piezas, niveles, inf)
-        vista, piezas = preparar_vista(doc, vista_base, piezas, cfg.acero, inf)
+        piezas, ocultar_siempre = ordenar_piezas(piezas, niveles, inf)
+        vista, piezas = preparar_vista(doc, vista_base, piezas, cfg.acero, inf, ocultar_siempre)
         contar(piezas, inf)
         cuadros = construir_guion(piezas, cfg)
         inf.cuadros_total = len(cuadros)

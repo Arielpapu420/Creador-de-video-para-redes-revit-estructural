@@ -65,8 +65,8 @@ def _caja_lineal(x0, y0, x1, y1, ancho, z0, z1, recorte=0.0):
 
 
 class _Constructor(object):
-    def __init__(self):
-        self.doc = Document("Casa sintética de muros de carga")
+    def __init__(self, titulo):
+        self.doc = Document(titulo)
         self.cats = {}
         self.ids = {}  # rol -> [ids]
         for i, (clave, nombre) in enumerate([
@@ -77,7 +77,8 @@ class _Constructor(object):
                 ("OST_Rebar", "Armadura estructural"), ("OST_GenericModel", "Modelos genéricos"),
                 ("OST_FabricReinforcement", "Malla electrosoldada"),
                 ("OST_Toposolid", "Toposólido"), ("OST_Doors", "Puertas"), ("OST_Windows", "Ventanas")]):
-            cat = Category(getattr(BuiltInCategory, clave), nombre, -2000000 - i)
+            bic = getattr(BuiltInCategory, clave)
+            cat = Category(bic, nombre, bic.valor)
             self.cats[clave] = cat
             self.doc._categorias[clave] = cat
 
@@ -97,8 +98,9 @@ class _Constructor(object):
         return self.nuevo(Material, "materiales", nombre).Id.Value
 
 
-def crear_documento():
-    b = _Constructor()
+def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
+    """Documento sintético. El título lleva "VIDEO" para que nodo_piezas.py acepte trabajar."""
+    b = _Constructor(titulo)
     doc = b.doc
 
     for nombre, elev in NIVELES:
@@ -191,7 +193,7 @@ def crear_documento():
                                 [_caja(xm - 0.075, ym - 0.075, z0, xm + 0.075, ym + 0.075, z_trabe)]))
         for x0, y0, x1, y1, _ in tramos:
             b.nuevo(Wall, "muros_" + rol, "", "OST_Walls", t_muro,
-                    [_caja_lineal(x0, y0, x1, y1, 0.15, z0, z_trabe, recorte=0.125)])
+                    [_caja_lineal(x0, y0, x1, y1, 0.15, z0, z_trabe, recorte=0.125)], materiales=[m_block])
         for x0, y0, x1, y1, _ in tramos:
             e = b.nuevo(FamilyInstance, "trabes_" + rol, "", "OST_StructuralFraming", t_cerramiento,
                         [_caja_lineal(x0, y0, x1, y1, 0.15, z_trabe, z_losa)])
@@ -237,7 +239,7 @@ def crear_documento():
     for x0, y0, x1, y1, perim in tramos:
         if perim:
             b.nuevo(Wall, "pretiles", "", "OST_Walls", t_pretil,
-                    [_caja_lineal(x0, y0, x1, y1, 0.12, 6.0, 6.9)])
+                    [_caja_lineal(x0, y0, x1, y1, 0.12, 6.0, 6.9)], materiales=[m_block])
 
     # Base de tinaco y tinaco en la azotea
     b.nuevo(Floor, "tinaco", "", "OST_Floors", t_base_tinaco, [_caja(6.3, 8.0, 6.0, 7.7, 9.4, 6.4)])

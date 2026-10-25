@@ -26,9 +26,10 @@ class ErrorRevit(Exception):
 # -----------------------------------------------------------------------------
 
 class _Miembro(object):
-    def __init__(self, enum, nombre):
+    def __init__(self, enum, nombre, valor=0):
         self.enum = enum
         self.nombre = nombre
+        self.valor = valor
 
     def __repr__(self):
         return "%s.%s" % (self.enum, self.nombre)
@@ -36,8 +37,8 @@ class _Miembro(object):
 
 def _enum(nombre, miembros):
     cls = type(nombre, (object,), {})
-    for m in miembros:
-        setattr(cls, m, _Miembro(nombre, m))
+    for i, m in enumerate(miembros):
+        setattr(cls, m, _Miembro(nombre, m, -2000000 - i))  # como los ids negativos de Revit
     return cls
 
 
@@ -167,6 +168,8 @@ class ElementId(object):
     """Igualdad por identidad (no por valor) para obligar a comparar enteros."""
 
     def __init__(self, valor):
+        if isinstance(valor, _Miembro):  # ElementId(BuiltInCategory.X)
+            valor = valor.valor
         self._v = int(valor)
 
     @property
@@ -338,7 +341,137 @@ class FamilyInstance(Element):
 
 
 class Wall(Element):
+    """Muro recto: el eje (LocationCurve) y el espesor salen de su primera caja."""
+
+    @property
+    def Location(self):
+        (x0, y0, z0), (x1, y1, z1) = self._cajas[0]
+        if (x1 - x0) >= (y1 - y0):
+            yc = (y0 + y1) / 2.0
+            return LocationCurve(Line(XYZ(x0, yc, z0), XYZ(x1, yc, z0)))
+        xc = (x0 + x1) / 2.0
+        return LocationCurve(Line(XYZ(xc, y0, z0), XYZ(xc, y1, z0)))
+
+    @property
+    def Width(self):
+        (x0, y0, _), (x1, y1, _) = self._cajas[0]
+        return min(x1 - x0, y1 - y0)
+
+
+# -----------------------------------------------------------------------------
+#  Geometría para DirectShape
+# -----------------------------------------------------------------------------
+
+TOLERANCIA_CURVA_CORTA = 1.0 / 256.0  # pies, como Application.ShortCurveTolerance
+
+
+class Line(object):
+    def __init__(self, a, b):
+        self._a, self._b = a, b
+
+    @staticmethod
+    def CreateBound(a, b):
+        if not isinstance(a, XYZ) or not isinstance(b, XYZ):
+            raise TypeError("Line.CreateBound espera XYZ")
+        if a.DistanceTo(b) < TOLERANCIA_CURVA_CORTA:
+            raise ErrorRevit("Line.CreateBound: curva demasiado corta")
+        return Line(a, b)
+
+    def GetEndPoint(self, i):
+        return self._a if i == 0 else self._b
+
+    def GetType(self):
+        return _TipoNet("Line")
+
+
+class LocationCurve(object):
+    def __init__(self, curva):
+        self.Curve = curva
+
+
+class CurveLoop(object):
+    def __init__(self):
+        self._curvas = []
+
+    def Append(self, curva):
+        if self._curvas and not self._curvas[-1].GetEndPoint(1).IsAlmostEqualTo(curva.GetEndPoint(0), 1e-9):
+            raise ErrorRevit("CurveLoop.Append: la curva no continúa el contorno")
+        self._curvas.append(curva)
+
+    def _puntos(self):
+        return [c.GetEndPoint(0) for c in self._curvas]
+
+
+class GeometryObject(object):
     pass
+
+
+class Solid(GeometryObject):
+    def __init__(self, caja, material):
+        self._caja = caja
+        self._material = material
+
+
+class SolidOptions(object):
+    def __init__(self, material_id, estilo_id):
+        self.MaterialId = material_id
+        self.GraphicsStyleId = estilo_id
+
+
+class GeometryCreationUtilities(object):
+    @staticmethod
+    def CreateExtrusionGeometry(lazos, direccion, distancia, opciones=None):
+        if not isinstance(lazos, ListaNet) or lazos.Count == 0:
+            raise TypeError("CreateExtrusionGeometry espera IList<CurveLoop>")
+        if not direccion.IsAlmostEqualTo(XYZ.BasisZ, 1e-9):
+            raise ErrorRevit("El simulador solo admite extrusiones verticales")
+        if distancia <= 0:
+            raise ErrorRevit("Distancia de extrusión no positiva")
+        lazo = list(lazos)[0]
+        pts = lazo._puntos()
+        if len(pts) < 3 or not lazo._curvas[-1].GetEndPoint(1).IsAlmostEqualTo(pts[0], 1e-9):
+            raise ErrorRevit("CurveLoop abierto")
+        z = pts[0].Z
+        caja = ((min(p.X for p in pts), min(p.Y for p in pts), z),
+                (max(p.X for p in pts), max(p.Y for p in pts), z + distancia))
+        return Solid(caja, opciones.MaterialId if opciones is not None else None)
+
+
+class DirectShape(Element):
+    """Forma directa: la única clase de elemento que el simulador deja crear y borrar."""
+
+    @staticmethod
+    def CreateElement(doc, categoria_id):
+        if not doc._transaccion:
+            raise ErrorRevit("Modificación fuera de transacción: DirectShape.CreateElement")
+        cat = next((c for c in doc._categorias.values() if c.Id.Value == categoria_id.Value), None)
+        if cat is None:
+            raise ErrorRevit("Categoría no válida para DirectShape")
+        ds = DirectShape(doc, doc._siguiente_id(), "", cat)
+        object.__setattr__(ds, "ApplicationId", "")
+        object.__setattr__(ds, "ApplicationDataId", "")
+        object.__setattr__(ds, "_material", None)
+        doc._agregar(ds)
+        simulador.estado.piezas_creadas += 1
+        return ds
+
+    def __setattr__(self, nombre, valor):
+        if nombre in ("ApplicationId", "ApplicationDataId"):
+            if not self._doc._transaccion:
+                raise ErrorRevit("Modificación fuera de transacción: %s" % nombre)
+            object.__setattr__(self, nombre, valor)
+        else:
+            Element.__setattr__(self, nombre, valor)
+
+    def SetShape(self, geometria):
+        if not self._doc._transaccion:
+            raise ErrorRevit("Modificación fuera de transacción: SetShape")
+        if not isinstance(geometria, ListaNet):
+            raise TypeError("SetShape espera IList<GeometryObject>")
+        solidos = list(geometria)
+        object.__setattr__(self, "_cajas", [g._caja for g in solidos])
+        mat = solidos[0]._material if solidos else None
+        object.__setattr__(self, "_material", mat)
 
 
 class Floor(Element):
@@ -700,9 +833,19 @@ class Document(object):
             raise ErrorRevit("Regenerate fuera de transacción")
         simulador.estado.registro.append(("Regenerate",))
 
-    def Delete(self, *args):
-        simulador.estado.modificaciones_modelo.append(("Delete", args))
-        raise ErrorRevit("El nodo intentó borrar elementos")
+    def Delete(self, ids):
+        """Solo se dejan borrar las piezas creadas para el video (DirectShape VIDEO_OBRA)."""
+        if not self._transaccion:
+            raise ErrorRevit("Modificación fuera de transacción: Delete")
+        if not isinstance(ids, ListaNet):
+            raise TypeError("Delete espera ICollection<ElementId>")
+        for i in ids:
+            e = self._elementos.get(i.Value)
+            if not isinstance(e, DirectShape) or e.ApplicationId != "VIDEO_OBRA":
+                simulador.estado.modificaciones_modelo.append(("Delete", i.Value))
+                raise ErrorRevit("El nodo intentó borrar el elemento %d del modelo" % i.Value)
+        for i in ids:
+            del self._elementos[i.Value]
 
     def ExportImage(self, op):
         est = simulador.estado

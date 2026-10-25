@@ -1,0 +1,420 @@
+{
+  "Uuid": "8ee23b0cd3f9540db745d633a92061a4",
+  "IsCustomNode": false,
+  "Description": "Crea blocks y piedras como DirectShape para el video, solo en una copia del modelo cuyo nombre contenga VIDEO.",
+  "Name": "Piezas_Obra",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [
+    {
+      "Id": "5df0039420185764bce520c1cc02c50b",
+      "Name": "Largo del block (cm)",
+      "Type": "number",
+      "Type2": "number",
+      "Value": "40.0",
+      "Description": "Medida nominal, con junta",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "639c928551955209b40ce0e81cac0165",
+      "Name": "Alto del block (cm)",
+      "Type": "number",
+      "Type2": "number",
+      "Value": "20.0",
+      "Description": "Medida nominal, con junta",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "031db226f4c056e4860c4f4e1eaeb689",
+      "Name": "Espesor del block (cm)",
+      "Type": "number",
+      "Type2": "number",
+      "Value": "12.0",
+      "Description": "Espesor del block",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "bdc1216e30695356abf45b800c5175ff",
+      "Name": "Junta (cm)",
+      "Type": "number",
+      "Type2": "number",
+      "Value": "1.0",
+      "Description": "Junta de mortero entre blocks",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "69135353a8e45404aae6c4ea9fa0a894",
+      "Name": "Piedras en mampostería",
+      "Type": "boolean",
+      "Type2": "boolean",
+      "Value": "true",
+      "Description": "Convertir los cimientos de piedra en piedras",
+      "SelectedIndex": 0
+    },
+    {
+      "Id": "568883e324215b8882b21d7f89aa5452",
+      "Name": "Solo borrar piezas",
+      "Type": "boolean",
+      "Type2": "boolean",
+      "Value": "false",
+      "Description": "True: borra las piezas creadas antes y no crea nuevas",
+      "SelectedIndex": 0
+    }
+  ],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 40.0,
+      "Outputs": [
+        {
+          "Id": "d99c53cb5fb85c08a181cbb28f89ab41",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Creates a number.",
+      "Id": "5df0039420185764bce520c1cc02c50b",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 20.0,
+      "Outputs": [
+        {
+          "Id": "9e5deac2d30c5eba9b600810f6c1dc2e",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Creates a number.",
+      "Id": "639c928551955209b40ce0e81cac0165",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 12.0,
+      "Outputs": [
+        {
+          "Id": "6bb7eb70d7385af2ad621fe4b18f012c",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Creates a number.",
+      "Id": "031db226f4c056e4860c4f4e1eaeb689",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.DoubleInput, CoreNodeModels",
+      "NodeType": "NumberInputNode",
+      "NumberType": "Double",
+      "InputValue": 1.0,
+      "Outputs": [
+        {
+          "Id": "c1228ea42178526995c147e0ccb18ce3",
+          "Name": "",
+          "Description": "Double",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Creates a number.",
+      "Id": "bdc1216e30695356abf45b800c5175ff",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": true,
+      "Outputs": [
+        {
+          "Id": "31e90ad6243c540da225339d0615d5a5",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Enables selection between True and False",
+      "Id": "69135353a8e45404aae6c4ea9fa0a894",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "NodeType": "BooleanInputNode",
+      "InputValue": false,
+      "Outputs": [
+        {
+          "Id": "cd7321e5f85d54bcb0faed7d2b6f4de5",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Description": "Enables selection between True and False",
+      "Id": "568883e324215b8882b21d7f89aa5452",
+      "Inputs": [],
+      "Replication": "Disabled"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "# -*- coding: utf-8 -*-\n# =============================================================================\n#  PIEZAS DE OBRA - Nodo Python de Dynamo (crear blocks y piedras para el video)\n#  Revit 2025 · Dynamo 3.x · motor CPython3 (pythonnet 2.5) · sin pyRevit\n# =============================================================================\n#  En Revit un muro es un solo sólido. Para que el video muestre cómo se colocan\n#  los blocks y las piedras, este nodo crea cada pieza como DirectShape\n#  (Modelo genérico) marcada con ApplicationId = \"VIDEO_OBRA\". Después,\n#  nodo_video.py oculta el muro original y coloca las piezas hilada por hilada.\n#\n#  SEGURIDAD: solo corre si el nombre del archivo contiene \"VIDEO\" (por ejemplo,\n#  MODELO_VIDEO.rvt). Trabaja SIEMPRE sobre una copia del modelo. No modifica\n#  ni borra elementos existentes: solo crea (o borra) sus propias piezas.\n#\n#  Entradas del nodo:\n#    IN[0]  Largo del block en cm (40)\n#    IN[1]  Alto del block en cm (20)\n#    IN[2]  Espesor del block en cm (12)\n#    IN[3]  Junta de mortero en cm (1)\n#    IN[4]  Generar piedras en cimientos de mampostería (True)\n#    IN[5]  Solo borrar las piezas creadas antes (False)\n#  Salida:\n#    OUT    Resumen en texto (piezas por muro, muros omitidos, errores)\n#\n#  Las medidas del block son nominales (con junta): un block 12x20x40 con junta\n#  de 1 cm se dibuja de 39 x 19 cm y ocupa un módulo de 40 x 20 cm.\n# =============================================================================\n\nimport clr\nclr.AddReference(\"RevitAPI\")\nclr.AddReference(\"RevitServices\")\n\nfrom System.Collections.Generic import List\nfrom Autodesk.Revit.DB import (\n    BuiltInCategory, CurveLoop, DirectShape, Element, ElementId, FilteredElementCollector,\n    GeometryCreationUtilities, GeometryObject, Line, SolidOptions, XYZ,\n)\nfrom RevitServices.Persistence import DocumentManager\nfrom RevitServices.Transactions import TransactionManager\n\nimport math\nimport random\nimport time\nimport traceback\n\n# =============================================================================\n#  PARÁMETROS EDITABLES\n# =============================================================================\n\nAPLICACION = \"VIDEO_OBRA\"          # marca de las piezas (la lee nodo_video.py)\nNOMBRE_REQUERIDO = \"VIDEO\"         # el archivo debe llamarse así (seguridad)\n\n# Muros que se convierten (palabras en tipo, familia o material; sin acentos)\nPALABRAS_BLOCK = (\"block\", \"bloque\", \"tabique\", \"tabicon\", \"ladrillo\")\nPALABRAS_PIEDRA = (\"piedra\", \"roca\", \"mamposter\", \"braza\")\nPALABRAS_EXCLUIR = (\"concreto armado\", \"cisterna\", \"muro de concreto\")\n\n# Obstáculos que cortan las hiladas (castillos, dalas, cerramientos, vanos)\nCATEGORIAS_OBSTACULO = [\"OST_StructuralColumns\", \"OST_StructuralFraming\", \"OST_Doors\", \"OST_Windows\"]\n\n# Piedra braza (metros)\nPIEDRA_ALTO = (0.20, 0.30)         # alto de hilada (mín, máx)\nPIEDRA_LARGO = (0.25, 0.45)\nPIEDRA_JUNTA = 0.025\nPIEDRAS_A_LO_ANCHO = 2             # piedras en el espesor del cimiento\nMORTERO_RETIRO = 0.03              # la cama de mortero queda 3 cm adentro de la cara\nMORTERO_ALTO = 0.6                 # y llega al 60 % de la hilada: las piedras sobresalen\n\nPIEZA_MINIMA = 0.05                # trozos más cortos no se dibujan (m)\nSEMILLA = 7                        # misma semilla = mismas piedras en cada corrida\n\n\n# =============================================================================\n#  UTILIDADES\n# =============================================================================\n\nM = 1.0 / 0.3048  # metros -> pies\n\n\ndef _sin_acentos(texto):\n    tabla = {\"á\": \"a\", \"é\": \"e\", \"í\": \"i\", \"ó\": \"o\", \"ú\": \"u\", \"ü\": \"u\", \"ñ\": \"n\"}\n    return \"\".join(tabla.get(c, c) for c in (texto or \"\").lower())\n\n\ndef id_entero(eid):\n    try:\n        return int(eid.Value)\n    except AttributeError:\n        return int(eid.IntegerValue)\n\n\ndef lista_net(tipo, items):\n    lista = List[tipo]()\n    for i in items:\n        lista.Add(i)\n    return lista\n\n\ndef nombre_elemento(e):\n    try:\n        return Element.Name.GetValue(e) or \"\"\n    except Exception:\n        try:\n            return e.Name or \"\"\n        except Exception:\n            return \"\"\n\n\ndef texto_de(doc, e):\n    \"\"\"Tipo + familia + materiales, para buscar palabras clave.\"\"\"\n    partes = []\n    try:\n        tipo = doc.GetElement(e.GetTypeId())\n        if tipo is not None:\n            partes.append(nombre_elemento(tipo))\n            try:\n                partes.append(tipo.FamilyName or \"\")\n            except Exception:\n                pass\n    except Exception:\n        pass\n    try:\n        for mid in e.GetMaterialIds(False):\n            m = doc.GetElement(mid)\n            if m is not None:\n                partes.append(nombre_elemento(m))\n    except Exception:\n        pass\n    return _sin_acentos(\" | \".join(partes))\n\n\ndef material_de(e):\n    try:\n        for mid in e.GetMaterialIds(False):\n            return mid\n    except Exception:\n        pass\n    return ElementId.InvalidElementId\n\n\ndef _entrada(entradas, i, defecto):\n    try:\n        v = entradas[i]\n    except (IndexError, TypeError):\n        return defecto\n    if isinstance(v, (list, tuple)):\n        v = v[0] if v else None\n    if v is None or (isinstance(v, str) and not v.strip()):\n        return defecto\n    return v\n\n\ndef _a_bool(v):\n    if isinstance(v, str):\n        return v.strip().lower() in (\"true\", \"si\", \"sí\", \"1\", \"verdadero\")\n    return bool(v)\n\n\ndef cerrar_transaccion():\n    TransactionManager.Instance.TransactionTaskDone()\n    TransactionManager.Instance.ForceCloseTransaction()\n\n\n# =============================================================================\n#  GEOMETRÍA DEL MURO (coordenadas locales: s a lo largo, t a lo ancho, z)\n# =============================================================================\n\nclass Marco(object):\n    \"\"\"Eje del muro en planta: origen, dirección u y normal v (flotantes, en pies).\"\"\"\n\n    def __init__(self, p0, p1):\n        dx, dy = p1[0] - p0[0], p1[1] - p0[1]\n        self.largo = math.sqrt(dx * dx + dy * dy)\n        self.ox, self.oy = p0[0], p0[1]\n        self.ux, self.uy = dx / self.largo, dy / self.largo\n        self.vx, self.vy = -self.uy, self.ux\n\n    def a_local(self, x, y):\n        rx, ry = x - self.ox, y - self.oy\n        return rx * self.ux + ry * self.uy, rx * self.vx + ry * self.vy\n\n    def a_mundo(self, s, t, z):\n        return XYZ(self.ox + self.ux * s + self.vx * t, self.oy + self.uy * s + self.vy * t, z)\n\n\ndef eje_del_muro(muro):\n    \"\"\"Extremos del eje (LocationCurve recta) o None si el muro es curvo.\"\"\"\n    try:\n        curva = muro.Location.Curve\n        if curva.GetType().Name != \"Line\":\n            return None\n        a, b = curva.GetEndPoint(0), curva.GetEndPoint(1)\n        return (a.X, a.Y), (b.X, b.Y)\n    except Exception:\n        return None\n\n\ndef obstaculos_del_muro(marco, ancho, cajas):\n    \"\"\"Intervalos (s0, s1, z0, z1) de obstáculos que cruzan la franja del muro.\"\"\"\n    res = []\n    tol = 0.01 * M\n    for (x0, y0, z0), (x1, y1, z1) in cajas:\n        ss, ts = [], []\n        for x in (x0, x1):\n            for y in (y0, y1):\n                s, t = marco.a_local(x, y)\n                ss.append(s)\n                ts.append(t)\n        if max(ts) <= -ancho / 2 + tol or min(ts) >= ancho / 2 - tol:\n            continue\n        if max(ss) <= tol or min(ss) >= marco.largo - tol:\n            continue\n        res.append((min(ss), max(ss), z0, z1))\n    return res\n\n\ndef tramos_libres(largo, bloqueos):\n    \"\"\"[0, largo] menos los intervalos bloqueados.\"\"\"\n    libres = [(0.0, largo)]\n    for b0, b1 in sorted(bloqueos):\n        nuevos = []\n        for a0, a1 in libres:\n            if b1 <= a0 or b0 >= a1:\n                nuevos.append((a0, a1))\n            else:\n                if b0 > a0:\n                    nuevos.append((a0, b0))\n                if b1 < a1:\n                    nuevos.append((b1, a1))\n        libres = nuevos\n    return libres\n\n\ndef caja_solida(marco, s0, s1, t0, t1, z0, z1, material):\n    \"\"\"Prisma rectangular alineado al muro, como Solid de Revit.\"\"\"\n    lazo = CurveLoop()\n    pts = [marco.a_mundo(s0, t0, z0), marco.a_mundo(s1, t0, z0),\n           marco.a_mundo(s1, t1, z0), marco.a_mundo(s0, t1, z0)]\n    for i in range(4):\n        lazo.Append(Line.CreateBound(pts[i], pts[(i + 1) % 4]))\n    opciones = SolidOptions(material, ElementId.InvalidElementId)\n    return GeometryCreationUtilities.CreateExtrusionGeometry(\n        lista_net(CurveLoop, [lazo]), XYZ.BasisZ, z1 - z0, opciones)\n\n\n# =============================================================================\n#  GENERADORES\n# =============================================================================\n\ndef piezas_block(marco, ancho_muro, z_base, z_tope, obst, cfg):\n    \"\"\"Blocks cuatrapeados: lista de (tipo, hilada, s0, s1, t0, t1, z0, z1).\"\"\"\n    res = []\n    mod_l, mod_h, junta = cfg.largo, cfg.alto, cfg.junta\n    espesor = min(cfg.espesor, ancho_muro)\n    t0, t1 = -espesor / 2.0, espesor / 2.0\n    minimo = PIEZA_MINIMA * M\n    hilada, z = 0, z_base\n    while z_tope - z > minimo:\n        z1 = min(z + mod_h, z_tope)\n        zc0, zc1 = z, z1 - junta\n        if zc1 - zc0 < minimo:\n            break\n        bloqueos = [(b0, b1) for b0, b1, o0, o1 in obst if o0 < zc1 - 1e-6 and o1 > zc0 + 1e-6]\n        for a0, a1 in tramos_libres(marco.largo, bloqueos):\n            s = a0 - (mod_l / 2.0 if hilada % 2 else 0.0)  # cuatrapeado\n            while s < a1 - 1e-9:\n                p0, p1 = max(s, a0), min(s + mod_l - junta, a1)\n                if p1 - p0 >= minimo:\n                    res.append((\"block\", hilada, p0, p1, t0, t1, zc0, zc1))\n                s += mod_l\n        hilada += 1\n        z = z1\n    return res\n\n\ndef piezas_piedra(marco, ancho_muro, z_base, z_tope, obst, rng):\n    \"\"\"Piedras irregulares por hilada, con cama de mortero.\"\"\"\n    res = []\n    junta = PIEDRA_JUNTA * M\n    minimo = PIEZA_MINIMA * M\n    hilada, z = 0, z_base\n    while z_tope - z > minimo:\n        h = rng.uniform(*PIEDRA_ALTO) * M\n        z1 = z_tope if z_tope - (z + h) < PIEDRA_ALTO[0] * M * 0.5 else z + h\n        bloqueos = [(b0, b1) for b0, b1, o0, o1 in obst if o0 < z1 and o1 > z]\n        retiro = MORTERO_RETIRO * M\n        for a0, a1 in tramos_libres(marco.largo, bloqueos):\n            if a1 - a0 < minimo:\n                continue\n            res.append((\"mortero\", hilada, a0 + retiro, a1 - retiro, -ancho_muro / 2.0 + retiro,\n                        ancho_muro / 2.0 - retiro, z, z + MORTERO_ALTO * (z1 - z)))\n            # Divisiones a lo ancho (cada hilada distinta)\n            cortes = [-ancho_muro / 2.0]\n            for k in range(1, PIEDRAS_A_LO_ANCHO):\n                base = -ancho_muro / 2.0 + ancho_muro * k / PIEDRAS_A_LO_ANCHO\n                cortes.append(base + rng.uniform(-0.1, 0.1) * ancho_muro)\n            cortes.append(ancho_muro / 2.0)\n            for c0, c1 in zip(cortes[:-1], cortes[1:]):\n                s = a0 + rng.uniform(0.0, PIEDRA_LARGO[0]) * M * (hilada % 2)\n                if s > a0:\n                    res.append((\"piedra\", hilada, a0, s - junta, c0 + junta / 2, c1 - junta / 2,\n                                z + rng.uniform(0, 0.02) * M, z1 - junta - rng.uniform(0, 0.03) * M))\n                while s < a1 - minimo:\n                    largo = rng.uniform(*PIEDRA_LARGO) * M\n                    p1 = min(s + largo - junta, a1)\n                    if p1 - s >= minimo:\n                        res.append((\"piedra\", hilada, s, p1, c0 + junta / 2, c1 - junta / 2,\n                                    z + rng.uniform(0, 0.02) * M, z1 - junta - rng.uniform(0, 0.03) * M))\n                    s += largo\n        hilada += 1\n        z = z1\n    return [r for r in res if r[3] - r[2] >= minimo and r[5] > r[4] and r[7] > r[6]]\n\n\n# =============================================================================\n#  PRINCIPAL\n# =============================================================================\n\ndef piezas_existentes(doc):\n    return [e for e in FilteredElementCollector(doc).OfClass(DirectShape).ToElements()\n            if (e.ApplicationId or \"\") == APLICACION]\n\n\ndef borrar_piezas(doc):\n    ids = [e.Id for e in piezas_existentes(doc)]\n    if ids:\n        doc.Delete(lista_net(ElementId, ids))\n    return len(ids)\n\n\ndef ejecutar(entradas):\n    L = []\n    t0 = time.time()\n    try:\n        doc = DocumentManager.Instance.CurrentDBDocument\n        nombre = (doc.Title or \"\") + \" \" + (doc.PathName or \"\")\n        if NOMBRE_REQUERIDO.upper() not in nombre.upper():\n            return (\"NO SE HIZO NADA: este nodo solo trabaja en una COPIA del modelo cuyo nombre \"\n                    \"contenga '%s' (por ejemplo, MODELO_VIDEO.rvt). Archivo actual: %s\"\n                    % (NOMBRE_REQUERIDO, doc.Title))\n\n        class Cfg(object):\n            pass\n        cfg = Cfg()\n        cfg.largo = float(_entrada(entradas, 0, 40)) / 100.0 * M\n        cfg.alto = float(_entrada(entradas, 1, 20)) / 100.0 * M\n        cfg.espesor = float(_entrada(entradas, 2, 12)) / 100.0 * M\n        cfg.junta = float(_entrada(entradas, 3, 1)) / 100.0 * M\n        cfg.piedras = _a_bool(_entrada(entradas, 4, True))\n        solo_borrar = _a_bool(_entrada(entradas, 5, False))\n        if cfg.junta >= min(cfg.largo, cfg.alto):\n            raise ValueError(\"La junta debe ser menor que el block.\")\n\n        TransactionManager.Instance.EnsureInTransaction(doc)\n        try:\n            borradas = borrar_piezas(doc)\n            L.append(\"Piezas anteriores borradas: %d\" % borradas)\n            if solo_borrar:\n                return \"\\n\".join(L)\n\n            cajas_obst = []\n            for nombre_cat in CATEGORIAS_OBSTACULO:\n                try:\n                    bic = getattr(BuiltInCategory, nombre_cat)\n                except AttributeError:\n                    continue\n                for e in FilteredElementCollector(doc).OfCategory(bic).WhereElementIsNotElementType().ToElements():\n                    bb = e.get_BoundingBox(None)\n                    if bb is not None:\n                        cajas_obst.append(((bb.Min.X, bb.Min.Y, bb.Min.Z), (bb.Max.X, bb.Max.Y, bb.Max.Z)))\n\n            muros = (FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Walls)\n                     .WhereElementIsNotElementType().ToElements())\n            categoria = ElementId(BuiltInCategory.OST_GenericModel)\n            total = {\"block\": 0, \"piedra\": 0, \"mortero\": 0}\n            omitidos = []\n            for muro in muros:\n                texto = texto_de(doc, muro)\n                if any(w in texto for w in PALABRAS_EXCLUIR):\n                    continue\n                es_piedra = any(w in texto for w in PALABRAS_PIEDRA)\n                es_block = any(w in texto for w in PALABRAS_BLOCK)\n                if not (es_block or (es_piedra and cfg.piedras)):\n                    continue\n                k = id_entero(muro.Id)\n                eje = eje_del_muro(muro)\n                bb = muro.get_BoundingBox(None)\n                if eje is None or bb is None:\n                    omitidos.append(\"%d: muro curvo o sin geometría\" % k)\n                    continue\n                try:\n                    ancho = muro.Width\n                    marco = Marco(*eje)\n                    obst = obstaculos_del_muro(marco, ancho, cajas_obst)\n                    if es_piedra:\n                        lista = piezas_piedra(marco, ancho, bb.Min.Z, bb.Max.Z, obst,\n                                              random.Random(SEMILLA * 100003 + k))\n                    else:\n                        lista = piezas_block(marco, ancho, bb.Min.Z, bb.Max.Z, obst, cfg)\n                    material = material_de(muro)\n                    for n, (tipo, hilada, s0, s1, t0_, t1_, z0, z1) in enumerate(lista):\n                        ds = DirectShape.CreateElement(doc, categoria)\n                        ds.ApplicationId = APLICACION\n                        ds.ApplicationDataId = \"pieza|%s|%d|%d|%d\" % (tipo, k, hilada, n)\n                        ds.SetShape(lista_net(GeometryObject,\n                                              [caja_solida(marco, s0, s1, t0_, t1_, z0, z1, material)]))\n                        total[tipo] += 1\n                    L.append(\"Muro %d (%s): %d piezas, %d hiladas\"\n                             % (k, \"piedra\" if es_piedra else \"block\", len(lista),\n                                1 + max([r[1] for r in lista] or [0])))\n                except Exception:\n                    omitidos.append(\"%d: error\\n%s\" % (k, traceback.format_exc()))\n        finally:\n            cerrar_transaccion()\n\n        L.insert(1, \"Piezas creadas: %d blocks, %d piedras, %d camas de mortero\"\n                 % (total[\"block\"], total[\"piedra\"], total[\"mortero\"]))\n        if omitidos:\n            L.append(\"Muros omitidos:\")\n            L += [\"  \" + o for o in omitidos]\n    except Exception:\n        L.append(\"ERROR:\\n\" + traceback.format_exc())\n        try:\n            TransactionManager.Instance.ForceCloseTransaction()\n        except Exception:\n            pass\n    L.append(\"Tiempo: %.1f s\" % (time.time() - t0))\n    return \"\\n\".join(L)\n\n\nOUT = ejecutar(IN)\n",
+      "Engine": "CPython3",
+      "EngineName": "CPython3",
+      "VariableInputPorts": true,
+      "NodeType": "PythonScriptNode",
+      "Id": "6077044e5d0e540aba84eb3520cf6a78",
+      "Inputs": [
+        {
+          "Id": "2628d8cd58b85cb0a5d807c21b3ec551",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6dce340dcf345c158c8ca8d09c27baba",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b76e71ca985857b78e9dbb13d2098c38",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3ad246cb7ba65fbca18ce4cc8c6dedac",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f322c84537515d33bc423043ad513892",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "ee07163c51a858069000c1aecd719758",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "16b3aaac01945d74b22a346fd19fdfb8",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded Python script."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "d99c53cb5fb85c08a181cbb28f89ab41",
+      "End": "2628d8cd58b85cb0a5d807c21b3ec551",
+      "Id": "67dc7a78008a5946af61d14a0c2360a4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9e5deac2d30c5eba9b600810f6c1dc2e",
+      "End": "6dce340dcf345c158c8ca8d09c27baba",
+      "Id": "72b51c2879485376adeba4e442545a08",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6bb7eb70d7385af2ad621fe4b18f012c",
+      "End": "b76e71ca985857b78e9dbb13d2098c38",
+      "Id": "4d6929f7c0ad5407a145d256a3cc2920",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "c1228ea42178526995c147e0ccb18ce3",
+      "End": "3ad246cb7ba65fbca18ce4cc8c6dedac",
+      "Id": "31612a72910d5bce94018c9dfda3b01e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "31e90ad6243c540da225339d0615d5a5",
+      "End": "f322c84537515d33bc423043ad513892",
+      "Id": "9922aaaf698b502e827120f2fce7e7e2",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cd7321e5f85d54bcb0faed7d2b6f4de5",
+      "End": "ee07163c51a858069000c1aecd719758",
+      "Id": "7206d9d7bb9958009a21124af5a8b6bc",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Thumbnail": "",
+  "GraphDocumentationURL": null,
+  "ExtensionWorkspaceData": [],
+  "Author": "",
+  "Linting": {
+    "activeLinter": "None",
+    "activeLinterId": "7b75fb44-43fd-4631-a878-29f4d5d8399a",
+    "warningCount": 0,
+    "errorCount": 0
+  },
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.0.3.7597",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "5df0039420185764bce520c1cc02c50b",
+        "Name": "Largo del block (cm)",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 0.0
+      },
+      {
+        "Id": "639c928551955209b40ce0e81cac0165",
+        "Name": "Alto del block (cm)",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 140.0
+      },
+      {
+        "Id": "031db226f4c056e4860c4f4e1eaeb689",
+        "Name": "Espesor del block (cm)",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 280.0
+      },
+      {
+        "Id": "bdc1216e30695356abf45b800c5175ff",
+        "Name": "Junta (cm)",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 420.0
+      },
+      {
+        "Id": "69135353a8e45404aae6c4ea9fa0a894",
+        "Name": "Piedras en mampostería",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 560.0
+      },
+      {
+        "Id": "568883e324215b8882b21d7f89aa5452",
+        "Name": "Solo borrar piezas",
+        "IsSetAsInput": true,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 0.0,
+        "Y": 700.0
+      },
+      {
+        "Id": "6077044e5d0e540aba84eb3520cf6a78",
+        "Name": "PIEZAS DE OBRA (blocks y piedras, solo en copia VIDEO)",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": true,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 520.0,
+        "Y": 300.0
+      }
+    ],
+    "Annotations": [],
+    "X": 60.0,
+    "Y": 60.0,
+    "Zoom": 0.9
+  }
+}
