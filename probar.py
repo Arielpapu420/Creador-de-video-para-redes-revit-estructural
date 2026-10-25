@@ -57,17 +57,17 @@ ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "t
 CADENA_ORDEN = [
     ["corridos"], ["dados"], ["mamposteria"], ["cisterna"], ["desplante"], ["firme"],
     ["columnas_pb", "castillos_pb"], ["muros_pb"], ["trabes_pb"], ["viguetas"], ["bovedillas"],
-    ["losas_maciza", "losas_compresion"], ["escaleras"], ["columnas_pa", "castillos_pa"], ["muros_pa"],
-    ["trabes_pa"], ["losas_pa"], ["pretiles"], ["tinaco"], ["exteriores"],
+    ["losas_compresion"], ["escaleras"], ["columnas_pa", "castillos_pa"], ["muros_pa"],
+    ["trabes_pa"], ["viguetas_pa"], ["bovedillas_pa"], ["losas_pa"], ["pretiles"], ["tinaco"], ["exteriores"],
 ]
 # Etapa que debe asignar el nodo a cada rol del modelo sintético
 ETAPA_ESPERADA = {
     "corridos": "cimentacion", "dados": "dados", "mamposteria": "mamposteria", "cisterna": "cisterna",
     "desplante": "desplante", "firme": "firme", "columnas_pb": "columnas", "castillos_pb": "columnas",
     "muros_pb": "muros", "trabes_pb": "trabes", "viguetas": "viguetas", "bovedillas": "bovedillas",
-    "losas_maciza": "losas", "losas_compresion": "losas", "escaleras": "escaleras",
+    "losas_compresion": "compresion", "escaleras": "escaleras",
     "columnas_pa": "columnas", "castillos_pa": "columnas", "muros_pa": "muros", "trabes_pa": "trabes",
-    "losas_pa": "losas", "pretiles": "muros", "tinaco": "tinaco", "exteriores": "exteriores",
+    "viguetas_pa": "viguetas", "bovedillas_pa": "bovedillas", "losas_pa": "compresion", "pretiles": "muros", "tinaco": "tinaco", "exteriores": "exteriores",
 }
 
 
@@ -309,6 +309,9 @@ def clasificacion_de_detalles(tmp):
     # Las viguetas tampoco dicen vigueta: se reconocieron por tamaño
     vig = next(p for p in piezas if p.clave == doc._ids_por_rol["viguetas"][0])
     assert "vigueta" not in vig.texto
+    # La capa de compresión de azotea no dice "compresión": se reconoció por estar sobre viguetas
+    capa = next(p for p in piezas if p.clave == doc._ids_por_rol["losas_pa"][0])
+    assert "compresion" not in capa.texto
     rep = leer(out)
     assert "TIPOS DE REVIT POR ETAPA" in rep and "Muro estructural 50 cm  · materiales: Piedra braza" in rep
 
@@ -648,8 +651,8 @@ def rotulos_y_orden_de_archivos(tmp):
         if t and (not secuencia or secuencia[-1] != t):
             secuencia.append(t)
     esperado = ["Cimentación", "Cimiento de mampostería", "Cisterna", "Cimentación", "Firme",
-                "Castillos y columnas", "Muros", "Trabes y cadenas", "Vigueta y bovedilla", "Losa",
-                "Planta alta", "Azotea", "Tinaco", "Exteriores"]
+                "Castillos y columnas", "Muros", "Trabes y cadenas", "Vigueta y bovedilla",
+                "Capa de compresión", "Escalera", "Planta alta", "Azotea", "Tinaco", "Exteriores"]
     assert secuencia == esperado, secuencia
     assert all(t == "" for t in textos[:22]) and all(t == "" for t in textos[361:])
     # Con acero: cada etapa con armado muestra primero su rótulo de armado
@@ -663,8 +666,9 @@ def rotulos_y_orden_de_archivos(tmp):
     esperado = ["Armado de cimentación", "Cimentación"] * 2 + [
         "Cimiento de mampostería", "Armado de cisterna", "Cisterna", "Armado de cimentación", "Cimentación",
         "Firme", "Armado de castillos y columnas", "Castillos y columnas", "Muros", "Armado de trabes y cadenas",
-        "Trabes y cadenas", "Vigueta y bovedilla", "Armado de losa", "Losa", "Armado planta alta",
-        "Planta alta", "Armado planta alta", "Planta alta", "Armado de azotea", "Azotea", "Tinaco",
+        "Trabes y cadenas", "Vigueta y bovedilla", "Malla de compresión", "Capa de compresión", "Escalera",
+        "Armado planta alta",
+        "Planta alta", "Armado planta alta", "Planta alta", "Azotea", "Armado de azotea", "Azotea", "Tinaco",
         "Exteriores"]
     assert secuencia == esperado, secuencia
     # Orden numérico sin depender del sufijo de Revit, con un duplicado más reciente

@@ -183,14 +183,15 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
   | 60 | Trabes, dalas, cerramientos y cadenas | El resto del Armazón estructural; dentro de la etapa, primero lo más bajo. |
   | 64 | Viguetas | "vigueta" en el nombre, o viga de 13 cm de ancho y 20 cm de peralte como máximo (las "mini trabes"). |
   | 66 | Bovedillas | "bovedilla", "casetón" o "poliestireno", en cualquier categoría. |
-  | 70 | Losas | Suelos y cubiertas: losa maciza, volados, firme de compresión. |
+  | 68 | Capa de compresión | Suelo con "compresión" en el nombre, o suelo apoyado sobre viguetas o bovedillas (la cara superior de alguna vigueta o bovedilla queda dentro de su espesor, con 3 cm de tolerancia, `SOBRE_VIGUETAS_TOL_M`). |
+  | 70 | Losas | El resto de los suelos y las cubiertas (losa maciza, si la hubiera). |
   | 80 | Escaleras | |
   | 96 | Tinaco | "tinaco" en el nombre (base y tinaco). |
   | al final | Exteriores | "banqueta", "andador", "pavimento" o "estacionamiento", o un suelo, rampa o escalera a nivel de terreno fuera de la huella de la casa. Se construyen después del último nivel. |
 
   Dentro de cada etapa ordena por Z y luego con un barrido en planta (diagonal a 45°), para que la
   casa se vea crecer. Cada etapa empieza con su armado (ver abajo). En una losa de vigueta y
-  bovedilla, la secuencia queda: viguetas → bovedillas → malla → firme de compresión.
+  bovedilla, la secuencia queda: viguetas → bovedillas → malla → capa de compresión.
 - **Tiempo de cada grupo:** cada pieza aparece al inicio de su intervalo de tiempo. Cada grupo (un
   nivel y una etapa, armado o concreto) dura al menos 0.7 s (`MIN_SEG_GRUPO`) aunque tenga pocos
   elementos. Si hay muchos grupos, ese mínimo baja para que todo quepa en el tiempo de obra.
@@ -209,7 +210,7 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
   zoom durante el giro) y con 8 % de margen. Exporta PNG de 1920 px de alto (1080 de ancho).
 - **El armado:** dentro de cada etapa aparece primero **todo** su acero y después todo su concreto.
   Por ejemplo: parrillas de cimientos → cimientos; armado de castillos y columnas → castillos y
-  columnas; armado de trabes y cadenas → trabes y cadenas; armado o malla de losa → losa. El acero
+  columnas; armado de trabes y cadenas → trabes y cadenas; viguetas → bovedillas → malla → capa de compresión. El acero
   toma la etapa de su anfitrión: `GetHostId()` en varillas y barras de refuerzo de área o de camino,
   `HostId` en mallas. Si una varilla no tiene anfitrión, se asigna al concreto que la contiene; si
   tampoco hay, queda en una etapa "acero" antes de las columnas. El armado de cada etapa dura el 80 %
@@ -263,12 +264,12 @@ copia el código directamente dentro del nodo Python en Dynamo.
 ### En `armar_video.py` (bloque "PARÁMETROS EDITABLES")
 
 - `ROTULOS_ETAPA`: texto de cada etapa ("Cimentación", "Cimiento de mampostería", "Cisterna",
-  "Firme", "Castillos y columnas", "Muros", "Trabes y cadenas", "Vigueta y bovedilla", "Losa",
-  "Tinaco", "Exteriores"). En los niveles superiores el rótulo es `ROTULO_PLANTA_ALTA`; la losa más
+  "Firme", "Castillos y columnas", "Muros", "Trabes y cadenas", "Vigueta y bovedilla", "Capa de
+  compresión", "Losa", "Escalera", "Tinaco", "Exteriores"). En los niveles superiores el rótulo es `ROTULO_PLANTA_ALTA`; la losa más
   alta (incluida su vigueta y bovedilla) y lo que está encima usan `ROTULO_AZOTEA`. Las etapas de
   `ETAPAS_ROTULO_PROPIO` (cisterna, tinaco, exteriores) muestran siempre su propio rótulo.
 - `ROTULOS_ARMADO`: texto mientras aparece el acero ("Armado de cimentación", "Armado de castillos y
-  columnas", "Armado de trabes y cadenas", "Armado de losa"...). En niveles superiores:
+  columnas", "Armado de trabes y cadenas", "Malla de compresión"...). En niveles superiores:
   `ROTULO_ARMADO_PLANTA_ALTA` y `ROTULO_ARMADO_AZOTEA`.
 - Posición y tamaño del rótulo: `ROTULO_Y` y `ROTULO_TAM`. Texto gancho: `TEXTO_GANCHO`,
   `GANCHO_SEG`, `GANCHO_Y` y `GANCHO_TAM`. Tarjeta final: `TARJETA_TEXTO`, `TARJETA_SEG`, colores y
@@ -290,11 +291,12 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
   "Piedra braza"), cimientos corridos de concreto, dados, cisterna, cadenas de desplante y firme.
 - **Estructura:** columnas, castillos, muros de block, dala de repartición, cerramiento de puerta y
   cadenas.
-- **Losas:**
-  - losa maciza con volado;
-  - losa de vigueta y bovedilla: las viguetas son "mini trabes" cuyo tipo no dice vigueta, las
-    bovedillas son modelos genéricos y el firme de compresión lleva malla;
-  - losa de azotea.
+- **Losas:** todas de vigueta y bovedilla, con cada parte como elemento aparte (en planta baja, en
+  azotea y en el volado de la marquesina):
+  - las viguetas son "mini trabes" cuyo tipo no dice vigueta (se reconocen por tamaño);
+  - las bovedillas son modelos genéricos;
+  - la capa de compresión es un suelo con malla. En planta baja su tipo dice "compresión"; en
+    azotea no, y se reconoce por estar sobre las viguetas.
 - **Azotea y exteriores:** pretiles, base de tinaco y tinaco, banqueta y patio exterior.
 - **Otros:** escalera, terreno con excavación, una puerta y un muro oculto en la vista base.
 - **Piezas:** las pruebas que las usan corren antes `nodo_piezas.py` sobre el modelo (cuyo nombre
@@ -303,8 +305,8 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
   - varillas y estribos en columnas, castillos, cadenas y trabes;
   - parrillas en cimientos y dados;
   - varillas en los muros de la cisterna;
-  - refuerzo de área (`RebarInSystem`) en las losas macizas;
-  - mallas (`FabricSheet`) en el firme de compresión y en la azotea;
+  - refuerzo de área (`RebarInSystem`) en el fondo y la tapa de la cisterna;
+  - mallas (`FabricSheet`) en las capas de compresión;
   - una varilla sin anfitrión dentro de una columna y otra fuera de todo concreto.
 
 ### Qué está probado (en el simulador, en Linux)
@@ -369,9 +371,9 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
 - `armar_video.py` genera un MP4 H.264 yuv420p de 1080x1920, 30 fps, 900 cuadros y 30.0 s. También
   ordena y renombra los PNG sin depender del sufijo de Revit. Los rótulos salen en orden. Sin acero:
   Cimentación → Cimiento de mampostería → Cisterna → Cimentación → Firme → Castillos y columnas →
-  Muros → Trabes y cadenas → Vigueta y bovedilla → Losa → Planta alta → Azotea → Tinaco → Exteriores.
-  Con acero, cada etapa que tiene armado muestra antes su rótulo de armado (por ejemplo, "Armado de
-  losa" → "Losa").
+  Muros → Trabes y cadenas → Vigueta y bovedilla → Capa de compresión → Escalera → Planta alta →
+  Azotea → Tinaco → Exteriores. Con acero, cada etapa que tiene armado muestra antes su rótulo de
+  armado (por ejemplo, "Malla de compresión" → "Capa de compresión").
 - `previa.py` genera la previa en MP4 y GIF.
 
 ### Qué no está probado

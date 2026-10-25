@@ -14,17 +14,21 @@ Contenido:
   - Cadenas de desplante y firme de concreto de planta baja.
   - Columnas en cruces y castillos a media crujía; muros de block; dala de repartición,
     cerramiento de puerta y cadenas de cerramiento.
-  - Planta baja: losa maciza, volado (marquesina) y losa de vigueta y bovedilla. Las viguetas
-    son "mini trabes" (Armazón estructural de 12x13 cm cuyo tipo NO dice vigueta: se
-    reconocen por tamaño); bovedillas como Modelo genérico; firme de compresión con malla.
-  - Planta alta y losa de azotea; pretiles; base de tinaco y tinaco.
+  - Todas las losas son de vigueta y bovedilla, cada parte como elemento aparte: viguetas
+    "mini trabes" (Armazón estructural de 12x13 cm cuyo tipo NO dice vigueta: se reconocen por
+    tamaño), bovedillas como Modelo genérico y capa de compresión (Suelo) con malla. En planta
+    baja la capa dice "compresión" en el tipo; en azotea no: se reconoce por estar sobre las
+    viguetas. La planta baja lleva un volado (marquesina) con viguetas en voladizo.
+  - Planta alta y azotea; pretiles; base de tinaco y tinaco.
   - Exteriores: banqueta (por palabra clave) y patio (por estar fuera de la huella).
   - Escalera, una puerta y un muro oculto en la vista base.
   - Acero con su anfitrión: varillas y estribos en columnas, castillos, cadenas y trabes;
     parrillas en cimientos corridos y dados; varillas en muros de cisterna; refuerzo de área
-    (RebarInSystem) en losas macizas; mallas (FabricSheet) en firme de compresión y azotea.
+    (RebarInSystem) en fondo y tapa de la cisterna; mallas (FabricSheet) en las capas de compresión.
     Además, una varilla sin anfitrión dentro de una columna y otra fuera de todo concreto.
 """
+import math
+
 from Autodesk.Revit.DB import (
     BuiltInCategory, Category, Document, FamilyInstance, Material, FamilySymbol, Floor, FloorType,
     FabricSheet, Level, Rebar, RebarBarType, RebarInSystem, Stairs, StairsType, Toposolid, View3D, Wall,
@@ -115,7 +119,6 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
     t_castillo = b.tipo(FamilySymbol, "Castillo 15x15", "OST_StructuralColumns")
     t_muro = b.tipo(WallType, "Muro de block 15 cm", "OST_Walls")
     t_pretil = b.tipo(WallType, "Pretil de block 12 cm", "OST_Walls")
-    t_losa = b.tipo(FloorType, "Losa maciza 10 cm", "OST_Floors")
     t_escalera = b.tipo(StairsType, "Escalera de concreto", "OST_Stairs")
     t_varilla = b.tipo(RebarBarType, "Varilla 3/8", "OST_Rebar")
     t_malla = b.tipo(FamilySymbol, "Malla 6x6-10/10", "OST_FabricReinforcement")
@@ -127,6 +130,7 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
     t_vigueta = b.tipo(FamilySymbol, "VP 12-5", "OST_StructuralFraming", familia="Elemento prefabricado")
     t_bovedilla = b.tipo(FamilySymbol, "Bovedilla 15x25x56", "OST_GenericModel", familia="Bovedilla")
     t_compresion = b.tipo(FloorType, "Firme de compresión 5 cm", "OST_Floors")
+    t_losa_azotea = b.tipo(FloorType, "Losa de azotea 5 cm", "OST_Floors")
     t_dala = b.tipo(FamilySymbol, "Dala de repartición 15x10", "OST_StructuralFraming")
     t_cerr_puerta = b.tipo(FamilySymbol, "Cerramiento 15x20", "OST_StructuralFraming")
     t_base_tinaco = b.tipo(FloorType, "Base de tinaco", "OST_Floors")
@@ -181,6 +185,23 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
     # Firme de planta baja (sobre el terreno, dentro de la casa)
     b.nuevo(Floor, "firme", "", "OST_Floors", t_firme, [_caja(0.075, 0.075, -0.08, 7.925, 9.925, 0.0)])
 
+    def vigueta_bovedilla(sufijo, sentido, a0, a1, c0, c1, zv):
+        """Viguetas a cada 70 cm paralelas a `sentido` ("x" o "y"), de a0 a a1, repartidas de c0
+        a c1, y bovedillas de 56 cm entre ellas. Peralte 13 cm bajo la capa de compresión (zv)."""
+        def caja(a_lo, a_hi, c_lo, c_hi):
+            if sentido == "x":
+                return _caja(a_lo, c_lo, zv - 0.13, a_hi, c_hi, zv)
+            return _caja(c_lo, a_lo, zv - 0.13, c_hi, a_hi, zv)
+        cs = [c0 + 0.6 + 0.7 * k for k in range(20) if c0 + 0.6 + 0.7 * k < c1 - 0.3]
+        for c in cs:
+            b.nuevo(FamilyInstance, "viguetas" + sufijo, "", "OST_StructuralFraming", t_vigueta,
+                    [caja(a0, a1, c - 0.06, c + 0.06)])
+        n = int(math.ceil((a1 - a0 - 0.15) / 0.6))
+        for c_a, c_b in zip([c0 + 0.075] + [c + 0.06 for c in cs], [c - 0.06 for c in cs] + [c1 - 0.075]):
+            b.nuevo(FamilyInstance, "bovedillas" + sufijo, "", "OST_GenericModel", t_bovedilla,
+                    [caja(a0 + 0.075 + 0.6 * k, min(a0 + 0.075 + 0.6 * (k + 1) - 0.02, a1 - 0.075), c_a, c_b)
+                     for k in range(n)])
+
     def planta(rol, z0, z_trabe, z_losa, z_tope):
         cols = []
         for x, y in cruces:
@@ -198,26 +219,19 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
             e = b.nuevo(FamilyInstance, "trabes_" + rol, "", "OST_StructuralFraming", t_cerramiento,
                         [_caja_lineal(x0, y0, x1, y1, 0.15, z_trabe, z_losa)])
             armazon.append((e, x0, y0, x1, y1, z_trabe, z_losa))
-        if rol == "pb":
-            # Losa maciza, volado y losa de vigueta y bovedilla
-            b.nuevo(Floor, "losas_maciza", "", "OST_Floors", t_losa, [_caja(-0.1, -0.1, z_losa, 4.0, 10.1, z_tope)])
-            b.nuevo(Floor, "losas_maciza", "", "OST_Floors", t_losa, [_caja(0.0, -1.2, z_losa, 4.0, -0.1, z_tope)])
-            zv = z_tope - 0.05
+        # Losa de vigueta y bovedilla en las dos crujías (viguetas en el claro corto, de 4 m)
+        zv = z_tope - 0.05
+        sufijo = "" if rol == "pb" else "_pa"
+        for xa in (0.0, 4.0):
             for ya, yb in ((0.0, 5.0), (5.0, 10.0)):
-                ys = [ya + 0.6 + 0.7 * k for k in range(7) if ya + 0.6 + 0.7 * k < yb - 0.3]
-                for y in ys:
-                    b.nuevo(FamilyInstance, "viguetas", "", "OST_StructuralFraming", t_vigueta,
-                            [_caja(4.0, y - 0.06, zv - 0.13, 8.0, y + 0.06, zv)])
-                for y_a, y_b in zip([ya + 0.075] + [y + 0.06 for y in ys], [y - 0.06 for y in ys] + [yb - 0.075]):
-                    b.nuevo(FamilyInstance, "bovedillas", "", "OST_GenericModel", t_bovedilla,
-                            [_caja(4.075 + 0.6 * k, y_a, zv - 0.13, min(4.075 + 0.6 * (k + 1) - 0.02, 7.925), y_b, zv)
-                             for k in range(7)])
+                vigueta_bovedilla(sufijo, "x", xa, xa + 4.0, ya, yb, zv)
+        if rol == "pb":
+            # Volado (marquesina): viguetas en voladizo, perpendiculares al muro
+            vigueta_bovedilla(sufijo, "y", -1.2, 0.0, 0.0, 4.0, zv)
             b.nuevo(Floor, "losas_compresion", "", "OST_Floors", t_compresion,
-                    [_caja(4.0, -0.1, zv, 8.1, 10.1, z_tope)])
+                    [_caja(-0.1, -0.1, zv, 8.1, 10.1, z_tope), _caja(0.0, -1.2, zv, 4.0, -0.1, z_tope)])
         else:
-            for xa, xb in ((-0.1, 4.0), (4.0, 8.1)):
-                b.nuevo(Floor, "losas_" + rol, "", "OST_Floors", t_losa,
-                        [_caja(xa, -0.1, z_losa, xb, 10.1, z_tope)])
+            b.nuevo(Floor, "losas_pa", "", "OST_Floors", t_losa_azotea, [_caja(-0.1, -0.1, zv, 8.1, 10.1, z_tope)])
         return cols
 
     columnas_pb = planta("pb", 0.0, 2.6, 2.9, 3.0)
@@ -342,10 +356,11 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
         cajas += [varilla_y(y0 + 0.05, y1 - 0.05, x, z + 0.012) for x in pasos(x0 + 0.1, x1 - 0.1, sep)]
         nueva_varilla("mallas", cajas, i, clase=FabricSheet, cat="OST_FabricReinforcement", tipo=t_malla)
 
-    # Losas macizas de planta baja (incluye el volado): refuerzo de área @ 30 cm
-    for i in b.ids["losas_maciza"]:
-        refuerzo_area(i)
-    # Firme de compresión de la vigueta y bovedilla y losa de azotea: malla
+    # Fondo y tapa de la cisterna: refuerzo de área @ 30 cm
+    for i in b.ids["cisterna"]:
+        if en_m(i)[5] - en_m(i)[2] < 1.0:
+            refuerzo_area(i)
+    # Capas de compresión de planta baja y azotea: malla
     for i in b.ids["losas_compresion"]:
         malla(i, 0.15)
     for i in b.ids["losas_pa"]:

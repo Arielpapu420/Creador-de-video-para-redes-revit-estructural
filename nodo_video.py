@@ -166,6 +166,7 @@ CATEGORIAS_OCULTAS_SIEMPRE = [
 #    "corrido"            cimiento corrido / losa de cimentación (no dado aislado)
 #    "desplante"          viga en la Z más baja del nivel, cerca del nivel
 #    "vigueta_tamano"     viga chica (ancho y peralte máximos abajo): vigueta
+#    "sobre_viguetas"     suelo apoyado sobre viguetas o bovedillas (capa de compresión)
 #    "firme"              suelo apoyado en su propio nivel (firme, no losa)
 #    "fuera_de_huella"    suelo/rampa/escalera a nivel de terreno, fuera de la huella
 #                         de la estructura (banquetas, patios, andadores)
@@ -184,6 +185,8 @@ REGLAS_ETAPA = [
     (20,     "dados",       "OST_StructuralFoundation",  None),
     (30,     "desplante",   "OST_StructuralFraming",     "desplante"),
     (64,     "viguetas",    "OST_StructuralFraming",     "vigueta_tamano"),
+    (68,     "compresion",  "OST_Floors",                "palabras:compresion"),
+    (68,     "compresion",  "OST_Floors",                "sobre_viguetas"),
     (35,     "firme",       "OST_Floors",                "firme"),
     (40,     "columnas",    "OST_StructuralColumns",     None),
     (50,     "muros",       "OST_Walls",                 None),
@@ -210,6 +213,7 @@ VIGUETA_ANCHO_MAX_M = 0.13     # viga de ancho y peralte menores o iguales = vig
 VIGUETA_PERALTE_MAX_M = 0.20
 ENTERRADO_TOL_M = 0.15         # "piedra": parte superior <= nivel + esto
 FIRME_TOL_M = 0.15             # "firme": parte superior <= su nivel + esto
+SOBRE_VIGUETAS_TOL_M = 0.03    # "sobre_viguetas": cara superior de la vigueta dentro del suelo +- esto
 EXTERIOR_ALTURA_MAX_M = 0.45   # "fuera_de_huella": parte superior <= nivel más bajo + esto
 HUELLA_MARGEN_M = 0.5          # la huella = columnas (o muros) en planta + este margen
 # Los modelos genéricos solo entran como exteriores por palabra clave (no por huella),
@@ -656,6 +660,16 @@ def _es_firme(p, ctx):
     return p.zmax <= elev + FIRME_TOL_M * M_A_PIES
 
 
+def _sobre_viguetas(p, ctx):
+    """El centro en planta de alguna vigueta o bovedilla cae dentro del suelo y su cara
+    superior queda dentro del espesor del suelo (con tolerancia)."""
+    tol = SOBRE_VIGUETAS_TOL_M * M_A_PIES
+    for cx, cy, zt in ctx["viguetas"]:
+        if p.xmin <= cx <= p.xmax and p.ymin <= cy <= p.ymax and p.zmin - tol <= zt <= p.zmax + tol:
+            return True
+    return False
+
+
 def _fuera_de_huella(p, ctx):
     huella = ctx["huella"]
     if huella is None or p.cat not in CATEGORIAS_EXTERIOR:
@@ -698,6 +712,7 @@ CONDICIONES = {
     "piedra": _es_piedra,
     "vigueta_tamano": _es_vigueta_por_tamano,
     "firme": _es_firme,
+    "sobre_viguetas": _sobre_viguetas,
     "fuera_de_huella": _fuera_de_huella,
 }
 
@@ -746,7 +761,11 @@ def ordenar_piezas(piezas, niveles, inf):
         if p.cat == "OST_StructuralFraming" and not _es_vigueta_por_tamano(p, None):
             actual = min_armazon.get(p.nivel)
             min_armazon[p.nivel] = p.zmin if actual is None else min(actual, p.zmin)
-    ctx = {"niveles": niveles, "min_armazon": min_armazon, "huella": _huella(piezas)}
+    es_vigueta = _palabras("palabras:vigueta|joist|bovedilla|caseton|poliestireno")
+    viguetas = [(p.cx, p.cy, p.zmax) for p in piezas
+                if not p.acero and p.pieza is None and p.cat != "OST_Floors" and
+                (es_vigueta(p, None) or (p.cat == "OST_StructuralFraming" and _es_vigueta_por_tamano(p, None)))]
+    ctx = {"niveles": niveles, "min_armazon": min_armazon, "huella": _huella(piezas), "viguetas": viguetas}
 
     por_clave = {}
     concretos = []

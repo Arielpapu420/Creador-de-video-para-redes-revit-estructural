@@ -52,8 +52,9 @@ ROTULOS_ETAPA = {
     "trabes": "Trabes y cadenas",
     "viguetas": "Vigueta y bovedilla",
     "bovedillas": "Vigueta y bovedilla",
+    "compresion": "Capa de compresión",
     "losas": "Losa",
-    "escaleras": "Losa",
+    "escaleras": "Escalera",
     "rampas": "Rampas",
     "tinaco": "Tinaco",
     "exteriores": "Exteriores",
@@ -72,6 +73,7 @@ ROTULOS_ARMADO = {
     "trabes": "Armado de trabes y cadenas",
     "viguetas": "Armado de losa",
     "bovedillas": "Armado de losa",
+    "compresion": "Malla de compresión",
     "losas": "Armado de losa",
     "escaleras": "Armado de escalera",
     "rampas": "Armado de rampas",
@@ -82,7 +84,7 @@ ROTULOS_ARMADO = {
 # Etapas que muestran su propio rótulo en cualquier nivel (no "Planta alta"/"Azotea")
 ETAPAS_ROTULO_PROPIO = ("cisterna", "tinaco", "exteriores")
 # Etapas que forman la losa (la más alta se rotula "Azotea")
-ETAPAS_LOSA = ("viguetas", "bovedillas", "losas")
+ETAPAS_LOSA = ("viguetas", "bovedillas", "compresion", "losas")
 ROTULO_PLANTA_ALTA = "Planta alta"   # cualquier etapa en niveles superiores
 ROTULO_AZOTEA = "Azotea"             # losa más alta y lo que esté encima
 ROTULO_ARMADO_PLANTA_ALTA = "Armado planta alta"
