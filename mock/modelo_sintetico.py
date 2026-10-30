@@ -5,7 +5,8 @@ No corresponde a ningún proyecto real. Planta de 8 x 10 m con ejes a cada 4 y 5
 Las medidas se escriben en metros y se convierten a pies (unidades internas de Revit).
 
 Contenido:
-  - Terreno (Toposolid) con excavación; fondo de excavación y guarnición (Modelos genéricos
+  - Terreno (Toposolid) con excavación, y además un Suelo "Terreno natural" y un Modelo
+    genérico "Topográfico" (se ocultan por nombre); fondo de excavación y guarnición (Modelos genéricos
     sin regla: quedan como base).
   - Cimiento de mampostería de piedra en el perímetro: Muros con material "Piedra braza" (el
     tipo NO dice piedra: se reconoce por el material). Cimientos corridos de concreto
@@ -148,6 +149,13 @@ def crear_documento(titulo="CASA_SINTETICA_VIDEO"):
     anillo = [_caja(tx0, ty0, -0.2, tx1, hy0, 0.0), _caja(tx0, hy1, -0.2, tx1, ty1, 0.0),
               _caja(tx0, hy0, -0.2, hx0, hy1, 0.0), _caja(hx1, hy0, -0.2, tx1, hy1, 0.0)]
     b.nuevo(Toposolid, "terreno", "Terreno", "OST_Toposolid", None, anillo)
+    # Terreno también modelado como Suelo (se reconoce por el nombre del tipo y se oculta)
+    t_terreno = b.tipo(FloorType, "Terreno natural 20 cm", "OST_Floors")
+    t_topo = b.tipo(FamilySymbol, "Topográfico", "OST_GenericModel", familia="Superficie")
+    b.nuevo(Floor, "terreno_suelo", "", "OST_Floors", t_terreno,
+            [_caja(tx0, ty0, -0.4, tx1, hy0, -0.2), _caja(tx0, hy1, -0.4, tx1, ty1, -0.2)])
+    b.nuevo(FamilyInstance, "terreno_suelo", "", "OST_GenericModel", t_topo,
+            [_caja(tx0, hy0, -0.4, hx0, hy1, -0.2)])
     b.nuevo(FamilyInstance, "genericos", "Fondo de excavación", "OST_GenericModel", t_generico,
             [_caja(hx0, hy0, -1.25, hx1, hy1, -1.15)])
     b.nuevo(FamilyInstance, "genericos", "Guarnición", "OST_GenericModel", t_generico,

@@ -149,6 +149,11 @@ CLAVES_ACERO = set(c for c, _ in CATEGORIAS_ACERO)
 # El terreno se oculta si OCULTAR_TERRENO es True.
 OCULTAR_TERRENO = True
 CATEGORIAS_TERRENO = ["OST_Toposolid", "OST_Topography"]
+# Terreno modelado como Suelo o Modelo genérico: se reconoce por el nombre del tipo,
+# la familia o el material (sin importar mayúsculas ni acentos). Con OCULTAR_TERRENO
+# se oculta todo el video; si no, queda visible como base (fuera de la secuencia).
+PALABRAS_TERRENO = ("terreno natural", "topografi")
+CATEGORIAS_TERRENO_POR_NOMBRE = ("OST_Floors", "OST_GenericModel")
 CATEGORIAS_OCULTAS_SIEMPRE = [
     "OST_Doors", "OST_Windows", "OST_Ceilings", "OST_Railings", "OST_StairsRailing",
     "OST_Columns", "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections",
@@ -778,8 +783,13 @@ def ordenar_piezas(piezas, niveles, inf):
 
     por_clave = {}
     concretos = []
+    terreno = []
     for p in piezas:
         if p.acero or p.pieza is not None:
+            continue
+        if p.cat in CATEGORIAS_TERRENO_POR_NOMBRE and any(w in p.texto for w in PALABRAS_TERRENO):
+            p.etapa = None  # terreno: fuera de la secuencia
+            terreno.append(p)
             continue
         p.orden, p.etapa = ETAPA_OTROS
         for orden, etapa, cat, prueba in reglas:
@@ -816,6 +826,13 @@ def ordenar_piezas(piezas, niveles, inf):
         muros_por_grupo.setdefault((p.nivel, p.orden), set()).add(clave_muro)
     ocultar_siempre = [m for m in reemplazados.values()]
     ocultar_siempre += [p for p in piezas if p.pieza is not None and p.etapa is None]
+    if terreno:
+        tipos = sorted(set(p.tipo for p in terreno))
+        if OCULTAR_TERRENO:
+            ocultar_siempre += terreno
+            inf.nota("Terreno oculto por nombre: %d elementos (%s)." % (len(terreno), ", ".join(tipos)))
+        else:
+            inf.nota("Terreno visible como base: %d elementos (%s)." % (len(terreno), ", ".join(tipos)))
     piezas = [p for p in piezas if p.clave not in reemplazados and not (p.pieza is not None and p.etapa is None)]
     concretos = [p for p in concretos if p.clave not in reemplazados]
     for clave in reemplazados:

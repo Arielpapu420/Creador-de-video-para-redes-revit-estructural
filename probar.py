@@ -53,7 +53,7 @@ def prueba(fn):
 # -----------------------------------------------------------------------------
 
 ROLES_ACERO = {"varillas", "varillas_area", "mallas", "varillas_contenidas", "varillas_sueltas"}
-ROLES_NO_ESTRUCTURA = {"terreno", "genericos", "puertas", "muro_oculto_base", "tipos", "materiales"} | ROLES_ACERO
+ROLES_NO_ESTRUCTURA = {"terreno", "terreno_suelo", "genericos", "puertas", "muro_oculto_base", "tipos", "materiales"} | ROLES_ACERO
 CADENA_ORDEN = [
     ["corridos"], ["dados"], ["mamposteria"], ["cisterna"], ["desplante"], ["firme"],
     ["columnas_pb", "castillos_pb"], ["muros_pb"], ["trabes_pb"], ["viguetas"], ["bovedillas"],
@@ -201,7 +201,7 @@ def secuencia_de_obra(tmp):
     ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
     est = estructura(doc)
     base = ids_rol(doc, "genericos")
-    nunca = ids_rol(doc, "puertas", "muro_oculto_base", "terreno", *ROLES_ACERO)
+    nunca = ids_rol(doc, "puertas", "muro_oculto_base", "terreno", "terreno_suelo", *ROLES_ACERO)
     previo = set()
     for e in ex:
         n, vis = numero_cuadro(e["ruta"]), set(e["visibles"])
@@ -318,6 +318,8 @@ def clasificacion_de_detalles(tmp):
     capa = next(p for p in piezas if p.clave == doc._ids_por_rol["losas_pa"][0])
     assert "compresion" not in capa.texto
     rep = leer(out)
+    assert "Terreno oculto por nombre: 2 elementos" in rep, "el Suelo y el genérico de terreno se ocultan"
+    assert not (ids_rol(doc, "terreno_suelo") & set(etapa)), "el terreno no entra a la secuencia"
     assert "TIPOS DE REVIT POR ETAPA" in rep and "Muro estructural 50 cm  · materiales: Piedra braza" in rep
 
 

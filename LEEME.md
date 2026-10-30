@@ -60,8 +60,9 @@ Con piezas y armado tarda alrededor de 8 minutos (medido en Linux).
   aristas. La vista de video lo hereda.
 - Recomendado: fondo blanco, sombras apagadas (exporta más rápido), sin caja de sección y sin
   plantilla de vista que controle Visibilidad/Gráficos.
-- El terreno (Toposólido y Topografía) se oculta en la vista `VIDEO OBRA`, así que no tapa la
-  cimentación. Para verlo, pon `OCULTAR_TERRENO = False` en el nodo.
+- El terreno se oculta en la vista `VIDEO OBRA`, así que no tapa la cimentación: Toposólido y
+  Topografía por categoría, y Suelos o Modelos genéricos cuyo tipo, familia o material diga
+  "terreno natural" o "topográfico" (`PALABRAS_TERRENO`). Para verlo, pon `OCULTAR_TERRENO = False`.
 - El acero no hay que prepararlo: el nodo activa "Ver sin obstrucciones" y "Ver como sólido" solo en
   la vista `VIDEO OBRA` y le pone nivel de detalle Alto (ver "El armado" más abajo).
 
