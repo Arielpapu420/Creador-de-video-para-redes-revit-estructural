@@ -72,11 +72,11 @@ ETAPA_ESPERADA = {
 
 
 def correr(carpeta, doc=None, acero=False, fps=15, duracion=30, grados=180, fallos=None,
-           exportador=None, vista="{3D}"):
+           exportador=None, vista="{3D}", zoom=1.0):
     doc = doc or modelo_sintetico.crear_documento()
     simulador.reiniciar(doc, exportador=exportador or simulador.exportador_rapido, escala=0.125,
                         fallos=fallos)
-    out, espacio = simulador.ejecutar_nodo(RUTA_NODO, [carpeta, vista, fps, duracion, grados, acero],
+    out, espacio = simulador.ejecutar_nodo(RUTA_NODO, [carpeta, vista, fps, duracion, grados, acero, zoom],
                                            devolver_espacio=True)
     return doc, out, espacio
 
@@ -200,17 +200,17 @@ def secuencia_de_obra(tmp):
     doc, out, _ = correr(os.path.join(tmp, "secuencia"))
     ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
     est = estructura(doc)
-    base = ids_rol(doc, "terreno", "genericos")
-    nunca = ids_rol(doc, "puertas", "muro_oculto_base", *ROLES_ACERO)
+    base = ids_rol(doc, "genericos")
+    nunca = ids_rol(doc, "puertas", "muro_oculto_base", "terreno", *ROLES_ACERO)
     previo = set()
     for e in ex:
         n, vis = numero_cuadro(e["ruta"]), set(e["visibles"])
         t = (n - 1) / 15.0
-        assert base <= vis, "el terreno y los genéricos deben verse siempre (cuadro %d)" % n
+        assert base <= vis, "los genéricos sin regla deben verse siempre (cuadro %d)" % n
         assert not (vis & nunca), "cuadro %d muestra elementos que deben quedar ocultos" % n
         obra = vis & est
         if t < 1.5:
-            assert not obra, "antes de 1.5 s solo debe verse el terreno (cuadro %d)" % n
+            assert not obra, "antes de 1.5 s no debe verse obra (cuadro %d)" % n
         if t >= 24.0:
             assert obra == est, "desde 24 s debe verse toda la estructura (cuadro %d)" % n
         assert previo <= obra, "la obra no puede 'desconstruirse' (cuadro %d)" % n
@@ -232,7 +232,8 @@ def secuencia_de_obra(tmp):
 def camara_y_encuadre(tmp):
     doc, out, _ = correr(os.path.join(tmp, "camara"), acero=True, exportador=simulador.exportador_vacio)
     ex = sorted(simulador.estado.exportes, key=lambda e: numero_cuadro(e["ruta"]))
-    est = estructura(doc) | ids_rol(doc, *ROLES_ACERO)  # el encuadre incluye el acero
+    # El encuadre incluye el acero y deja fuera los exteriores (banqueta, patio)
+    est = (estructura(doc) | ids_rol(doc, *ROLES_ACERO)) - ids_rol(doc, "exteriores")
     cajas = [c for i in est for c in doc._elementos[i]._cajas]
     xs = [c[k][0] for c in cajas for k in (0, 1)]
     ys = [c[k][1] for c in cajas for k in (0, 1)]
@@ -272,6 +273,10 @@ def camara_y_encuadre(tmp):
         giro.append(a)
     assert abs(giro[0] - (-45.0)) < 1e-6 and abs(giro[-1] - giro[0] - 180.0) < 1e-6, (giro[0], giro[-1])
     assert all(b >= a - 1e-9 for a, b in zip(giro, giro[1:])), "el giro debe ser continuo en un sentido"
+    # Zoom 2: misma cámara y mismo centro, caja de recorte de la mitad
+    correr(os.path.join(tmp, "camara_zoom"), acero=True, zoom=2.0, exportador=simulador.exportador_vacio)
+    cmin, cmax = simulador.estado.exportes[0]["crop"]
+    assert abs((cmax.X - cmin.X) - tam[0] / 2.0) < 1e-6 and abs((cmax.Y - cmin.Y) - tam[1] / 2.0) < 1e-6
 
 
 @prueba
@@ -623,7 +628,7 @@ def _verificar_dyn(ruta_dyn, ruta_nodo, tipos_esperados):
 
 @prueba
 def grafo_dyn_valido():
-    py, conectados = _verificar_dyn(RUTA_DYN, RUTA_NODO, ["StringInput"] * 2 + ["DoubleInput"] * 3 + ["BoolSelector"])
+    py, conectados = _verificar_dyn(RUTA_DYN, RUTA_NODO, ["StringInput"] * 2 + ["DoubleInput"] * 3 + ["BoolSelector", "DoubleInput"])
     assert conectados[py["Inputs"][5]["Id"]]["InputValue"] is True, "el acero debe venir activado por defecto"
     assert conectados[py["Inputs"][3]["Id"]]["InputValue"] == 60.0, "duración por defecto: 60 s"
     py, conectados = _verificar_dyn(RUTA_DYN_PIEZAS, RUTA_PIEZAS, ["DoubleInput"] * 4 + ["BoolSelector"] * 2)

@@ -31,6 +31,7 @@ def main(argv=None):
     ap.add_argument("--fps", type=float, default=15, help="FPS de exportación (entrada IN[2])")
     ap.add_argument("--duracion", type=float, default=60, help="Duración en s (IN[3])")
     ap.add_argument("--grados", type=float, default=180, help="Grados de giro (IN[4])")
+    ap.add_argument("--zoom", type=float, default=1.25, help="Zoom (IN[6]); 1 = casa completa")
     ap.add_argument("--sin-acero", action="store_true", help="No incluir el acero (IN[5] = False)")
     ap.add_argument("--sin-piezas", action="store_true", help="No correr nodo_piezas.py (muros sólidos)")
     ap.add_argument("--escala", type=float, default=0.5, help="Tamaño de cuadro: 0.5 = 540x960")
@@ -52,7 +53,8 @@ def main(argv=None):
         print(resumen.splitlines()[1] if "\n" in resumen else resumen)
     simulador.reiniciar(doc, exportador=simulador.exportador_matplotlib, escala=args.escala)
     informe = simulador.ejecutar_nodo(os.path.join(AQUI, "nodo_video.py"),
-                                      [carpeta, "{3D}", args.fps, args.duracion, args.grados, not args.sin_acero])
+                                      [carpeta, "{3D}", args.fps, args.duracion, args.grados, not args.sin_acero,
+                                       args.zoom])
     print("Cuadros dibujados en %.1f s. Informe: %s" % (time.time() - t0, informe))
     with open(informe, encoding="utf-8") as f:
         if "ERRORES (0)" not in f.read():

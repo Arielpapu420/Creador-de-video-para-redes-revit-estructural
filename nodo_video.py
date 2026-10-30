@@ -14,6 +14,7 @@
 #    IN[3]  Duración del video en segundos (número, 60 por defecto)
 #    IN[4]  Grados de giro de la cámara (número, 180 por defecto)
 #    IN[5]  Incluir acero de refuerzo (booleano, True por defecto)
+#    IN[6]  Zoom (número, 1.25 por defecto; 1 = la casa completa siempre en cuadro)
 #  Salida:
 #    OUT    Ruta de informe_video.txt
 #
@@ -68,6 +69,7 @@ FPS_DEFECTO = 15
 DURACION_DEFECTO = 60.0
 GRADOS_DEFECTO = 180.0
 ACERO_DEFECTO = True
+ZOOM_DEFECTO = 1.25
 
 # Guion en segundos: al inicio solo el terreno; al final, la estructura completa
 # terminando el giro. En videos muy cortos se limitan al 5 % y al 20 % de la duración.
@@ -80,6 +82,8 @@ AZIMUT_INICIAL_GRADOS = -45.0  # dirección centro->ojo en planta (-45 = desde +
 SUAVIZAR_GIRO = True           # arranque y final suaves (coseno)
 RELACION_ASPECTO = 9.0 / 16.0  # ancho / alto del cuadro
 MARGEN_ENCUADRE = 0.08         # 8 % de aire alrededor de la estructura
+# El encuadre se calcula sin las etapas de ETAPAS_AL_FINAL (banquetas, patios), que
+# alejan la cámara; con zoom > 1 algunas orillas pueden salir del cuadro en el giro.
 PIXELES_ALTO = 1920            # PixelSize con FitDirection Vertical
 
 # Secuencia
@@ -142,7 +146,9 @@ CLAVES_ACERO = set(c for c, _ in CATEGORIAS_ACERO)
 # Si no se incluye el acero, también se ocultan las CATEGORIAS_ACERO.
 # Refuerzo de área/camino y áreas de malla son solo contornos: sus barras y hojas
 # (RebarInSystem, FabricSheet) sí entran en la secuencia.
-# El terreno NO se toca: queda visible como base.
+# El terreno se oculta si OCULTAR_TERRENO es True.
+OCULTAR_TERRENO = True
+CATEGORIAS_TERRENO = ["OST_Toposolid", "OST_Topography"]
 CATEGORIAS_OCULTAS_SIEMPRE = [
     "OST_Doors", "OST_Windows", "OST_Ceilings", "OST_Railings", "OST_StairsRailing",
     "OST_Columns", "OST_CurtainWallPanels", "OST_CurtainWallMullions", "OST_StructConnections",
@@ -503,8 +509,11 @@ def leer_entradas(entradas):
     c.duracion = float(_entrada(entradas, 3, DURACION_DEFECTO))
     c.grados = float(_entrada(entradas, 4, GRADOS_DEFECTO))
     c.acero = _a_bool(_entrada(entradas, 5, ACERO_DEFECTO))
+    c.zoom = float(_entrada(entradas, 6, ZOOM_DEFECTO))
     if c.duracion <= 0:
         raise ValueError("La duración debe ser mayor que cero.")
+    if not 0.2 <= c.zoom <= 5.0:
+        raise ValueError("El zoom debe estar entre 0.2 y 5 (1 = casa completa).")
     return c
 
 
@@ -961,8 +970,13 @@ def orientacion_camara(centro, az_grados, distancia):
     return ViewOrientation3D(ojo, arriba, adelante)
 
 
-def calcular_encuadre(piezas, cuadros):
-    """Centro, semiancho y semialto constantes para todo el giro (9:16 con margen)."""
+def calcular_encuadre(piezas, cuadros, zoom=1.0):
+    """Centro, semiancho y semialto constantes para todo el giro (9:16 con margen).
+
+    Encuadra la casa sin los exteriores; la diagonal (profundidad) sí los incluye.
+    """
+    todas = piezas
+    piezas = [p for p in todas if p.etapa not in ETAPAS_AL_FINAL] or todas
     xmin = min(p.xmin for p in piezas)
     ymin = min(p.ymin for p in piezas)
     zmin = min(p.zmin for p in piezas)
@@ -978,14 +992,16 @@ def calcular_encuadre(piezas, cuadros):
             rel = (e[0] - c[0], e[1] - c[1], e[2] - c[2])
             sw = max(sw, abs(rel[0] * r[0] + rel[1] * r[1] + rel[2] * r[2]))
             sh = max(sh, abs(rel[0] * u[0] + rel[1] * u[1] + rel[2] * u[2]))
-    sw *= 1.0 + MARGEN_ENCUADRE
-    sh *= 1.0 + MARGEN_ENCUADRE
+    sw *= (1.0 + MARGEN_ENCUADRE) / zoom
+    sh *= (1.0 + MARGEN_ENCUADRE) / zoom
     if sw / sh > RELACION_ASPECTO:
         sh = sw / RELACION_ASPECTO
     else:
         sw = sh * RELACION_ASPECTO
-    diagonal = math.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2)
-    return c, sw, sh, diagonal
+    dx = max(p.xmax for p in todas) - min(p.xmin for p in todas)
+    dy = max(p.ymax for p in todas) - min(p.ymin for p in todas)
+    dz = max(p.zmax for p in todas) - min(p.zmin for p in todas)
+    return c, sw, sh, math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
 def ajustar_recorte(vista, centro, semi_ancho, semi_alto, profundidad):
@@ -1074,6 +1090,11 @@ def preparar_vista(doc, vista_base, piezas, incluir_acero, inf, ocultar_siempre=
                 inf.nota("No se pudo poner el nivel de detalle Alto (¿plantilla de vista?).")
 
         ocultas = list(CATEGORIAS_OCULTAS_SIEMPRE)
+        for cat in CATEGORIAS_TERRENO:
+            if OCULTAR_TERRENO:
+                ocultas.append(cat)
+            else:
+                _fijar_categoria(doc, vista, cat, False, inf)  # por si una corrida previa lo ocultó
         for cat, _ in CATEGORIAS_ACERO:
             if incluir_acero:
                 _fijar_categoria(doc, vista, cat, False, inf)  # por si una corrida previa la ocultó
@@ -1148,12 +1169,12 @@ def escribir_guion(ruta, cfg, niveles, piezas, cuadros):
 
 
 def exportar(doc, vista, piezas, cuadros, cfg, inf):
-    centro_f, semi_ancho, semi_alto, diagonal = calcular_encuadre(piezas, cuadros)
+    centro_f, semi_ancho, semi_alto, diagonal = calcular_encuadre(piezas, cuadros, cfg.zoom)
     centro = XYZ(centro_f[0], centro_f[1], centro_f[2])
     distancia = 2.0 * diagonal + 10.0
     op = opciones_exportacion(vista)
     existentes = cuadros_existentes(cfg.carpeta)
-    inf.parametros.append(("Encuadre (m)", "%.2f x %.2f" % (2 * semi_ancho * 0.3048, 2 * semi_alto * 0.3048)))
+    inf.parametros.append(("Encuadre (m)", "%.2f x %.2f (zoom %.2f)" % (2 * semi_ancho * 0.3048, 2 * semi_alto * 0.3048, cfg.zoom)))
 
     # Acero que se "tapa" cuando aparece su concreto (vuelve a quedar obstruido)
     tapa = {}

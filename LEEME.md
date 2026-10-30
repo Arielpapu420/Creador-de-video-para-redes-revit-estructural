@@ -19,7 +19,7 @@ sintética generada por código (`mock/modelo_sintetico.py`).
 | Archivo | Qué es |
 |---|---|
 | `nodo_video.py` | Código del nodo Python de Dynamo (Revit 2025, CPython3, pythonnet 2.5). |
-| `Video_Obra.dyn` | Grafo de Dynamo con el nodo y sus 6 entradas editables. Se genera con `generar_dyn.py`. |
+| `Video_Obra.dyn` | Grafo de Dynamo con el nodo y sus 7 entradas editables. Se genera con `generar_dyn.py`. |
 | `nodo_piezas.py` | Nodo Python de Dynamo que crea blocks y piedras (DirectShape) en la copia `...VIDEO...` del modelo. |
 | `Piezas_Obra.dyn` | Grafo de Dynamo con `nodo_piezas.py` y sus 6 entradas (medidas del block, junta, piedras, borrar). |
 | `armar_video.py` | Une los PNG en un MP4 1080x1920, 30 fps, H.264 yuv420p, con rótulos y tarjeta final. |
@@ -60,8 +60,8 @@ Con piezas y armado tarda alrededor de 8 minutos (medido en Linux).
   aristas. La vista de video lo hereda.
 - Recomendado: fondo blanco, sombras apagadas (exporta más rápido), sin caja de sección y sin
   plantilla de vista que controle Visibilidad/Gráficos.
-- Si el terreno tapa la cimentación, haz la excavación en el toposólido o dale transparencia al
-  terreno en esa vista. Si no, los cimientos y su armado quedan ocultos bajo el terreno.
+- El terreno (Toposólido y Topografía) se oculta en la vista `VIDEO OBRA`, así que no tapa la
+  cimentación. Para verlo, pon `OCULTAR_TERRENO = False` en el nodo.
 - El acero no hay que prepararlo: el nodo activa "Ver sin obstrucciones" y "Ver como sólido" solo en
   la vista `VIDEO OBRA` y le pone nivel de detalle Alto (ver "El armado" más abajo).
 
@@ -111,6 +111,7 @@ piezas; crearlas en Revit puede tardar unos minutos (no lo he medido).
 | Duración (s) | 60 | Duración total del video. |
 | Grados de giro | 180 | Giro total de la cámara. |
 | Incluir acero | True | Agrega el armado: varillas, barras de refuerzo de área o de camino, mallas y acopladores. |
+| Zoom | 1.25 | 1 = la casa completa siempre dentro del cuadro. Más alto acerca la cámara (1.5, 2...); algunas orillas pueden salir del cuadro durante el giro. |
 
 3. Comprueba que el nodo Python diga **CPython3** en su motor. El grafo viene en modo **Manual**:
    pulsa **Ejecutar**.
@@ -164,9 +165,9 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
 - **Elementos de la secuencia:** Cimentación estructural, Pilares estructurales, Armazón estructural,
   Muros, Suelos, Cubiertas, Escaleras, Rampas, los Modelos genéricos que reconozca alguna regla
   (bovedillas, tinaco, cisterna, banqueta) y el acero (Armadura estructural, Malla electrosoldada y
-  Acopladores). Toma solo los visibles en la vista base y respeta los que ahí estén ocultos. El
-  terreno y los modelos genéricos sin regla (árboles, autos, etc.) no se tocan: quedan siempre
-  visibles como base.
+  Acopladores). Toma solo los visibles en la vista base y respeta los que ahí estén ocultos. Los
+  modelos genéricos sin regla (árboles, autos, etc.) no se tocan: quedan siempre visibles como base.
+  El terreno se oculta (`OCULTAR_TERRENO`).
 - **Orden de obra:** agrupa los elementos por nivel, según la Z inferior de su BoundingBox (se asigna
   al nivel de Revit más cercano por debajo). Dentro de cada nivel el orden es:
 
@@ -195,7 +196,7 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
 - **Tiempo de cada grupo:** cada pieza aparece al inicio de su intervalo de tiempo. Cada grupo (un
   nivel y una etapa, armado o concreto) dura al menos 0.7 s (`MIN_SEG_GRUPO`) aunque tenga pocos
   elementos. Si hay muchos grupos, ese mínimo baja para que todo quepa en el tiempo de obra.
-- **Guion (60 s):** de 0 a 1.5 s solo se ve el terreno (con el texto gancho encima); de 1.5 a 54 s
+- **Guion (60 s):** de 0 a 1.5 s todavía no hay obra (con el texto gancho encima); de 1.5 a 54 s
   avanza la construcción; los últimos 6 s muestran la estructura completa mientras termina el giro, y
   en el último segundo y medio entra la tarjeta final. Los tiempos están en segundos
   (`SEG_SOLO_TERRENO`, `SEG_REMATE`); en videos muy cortos se limitan al 5 % y al 20 % de la duración.
@@ -207,7 +208,8 @@ Revit agrega el nombre de la vista a cada archivo (`frame_00001 - Vista 3D - VID
   en la secuencia (por ejemplo, oculto en la vista base) quedan ocultas.
 - **Cámara:** isométrica a 30° de elevación. Gira alrededor del centro de la BoundingBox total con
   `SetOrientation`, con arranque y final suaves. La caja de recorte es 9:16, de tamaño fijo (sin
-  zoom durante el giro) y con 8 % de margen. Exporta PNG de 1920 px de alto (1080 de ancho).
+  zoom durante el giro) y con 8 % de margen, dividida entre la entrada Zoom. Encuadra la casa sin los
+  exteriores (banquetas y patios), que alejarían la cámara. Exporta PNG de 1920 px de alto (1080 de ancho).
 - **El armado:** dentro de cada etapa aparece primero **todo** su acero y después todo su concreto.
   Por ejemplo: parrillas de cimientos → cimientos; armado de castillos y columnas → castillos y
   columnas; armado de trabes y cadenas → trabes y cadenas; viguetas → bovedillas → malla → capa de compresión. El acero
@@ -316,7 +318,7 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
 - No cambia la geometría ni borra ningún elemento del modelo. Solo crea una vista nueva y deja
   intacta la vista base (elementos ocultos, orientación y recorte). Los únicos ajustes sobre
   elementos son los gráficos del acero, y solo en la vista de video.
-- Antes de 1.5 s solo se ven el terreno y los modelos genéricos. Desde 24 s se ve toda la estructura.
+- El terreno queda oculto. Antes de 1.5 s solo se ven los modelos genéricos sin regla. Desde 24 s se ve toda la estructura.
   La obra nunca "se deshace". Puertas, varillas (sin la opción de acero) y el muro oculto en la vista
   base no aparecen nunca.
 - El orden de las 20 etapas se respeta en los dos niveles, la azotea y los exteriores, y cada etapa
@@ -366,7 +368,7 @@ el simulador de `mock/`. El modelo sintético es una casa de 2 niveles más azot
     los dados y antes de la cisterna.
 - Una vista base inexistente o en perspectiva produce un informe con el error, sin exportar nada.
 - `Video_Obra.dyn` y `Piezas_Obra.dyn` son JSON válido. Su nodo Python tiene `"Engine": "CPython3"`,
-  un código idéntico a su `.py` y 6 entradas conectadas del tipo correcto. Por defecto, el video
+  un código idéntico a su `.py` y sus entradas (7 y 6) conectadas del tipo correcto. Por defecto, el video
   dura 60 s con el acero activado, y las piezas son block 40x20x12 con junta de 1 cm.
 - `armar_video.py` genera un MP4 H.264 yuv420p de 1080x1920, 30 fps, 900 cuadros y 30.0 s. También
   ordena y renombra los PNG sin depender del sufijo de Revit. Los rótulos salen en orden. Sin acero:
@@ -435,7 +437,7 @@ cómo se comportan en Revit 2025 las siguientes llamadas:
   - el tiempo real por cuadro.
 - Que Dynamo 3.x de Revit 2025 abra `Video_Obra.dyn` sin advertencias. El JSON sigue el formato
   de Dynamo, pero no se ha abierto en Dynamo.
-- Cómo se ve en Revit el terreno sobre la cimentación.
+- `SetCategoryHidden` sobre `OST_Toposolid` y `OST_Topography` para ocultar el terreno.
 - Piezas, todo `nodo_piezas.py` en Revit:
   - `DirectShape.CreateElement(doc, ElementId(BuiltInCategory.OST_GenericModel))`;
   - asignar y leer `ApplicationId` y `ApplicationDataId`. Al leerlos, pythonnet 2.5 debe entregar

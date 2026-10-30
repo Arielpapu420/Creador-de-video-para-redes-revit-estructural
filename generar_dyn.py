@@ -31,6 +31,7 @@ GRAFOS = [
             ("Grados de giro", "numero", 180.0, "Giro total de la cámara alrededor de la estructura"),
             ("Incluir acero", "booleano", True,
              "Incluir el acero: varillas, barras de refuerzo de área/camino y mallas (armado antes del concreto)"),
+            ("Zoom", "numero", 1.25, "1 = casa completa siempre en cuadro; más alto = más cerca (1.5, 2...)"),
         ],
     },
     {
