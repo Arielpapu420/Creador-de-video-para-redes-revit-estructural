@@ -462,6 +462,18 @@ def piezas_solo_en_copia_video():
     out = simulador.ejecutar_nodo(RUTA_PIEZAS, [])
     assert out.startswith("NO SE HIZO NADA") and len(doc._elementos) == antes
     assert simulador.estado.piezas_creadas == 0
+    # Una CARPETA llamada VIDEO no habilita el modelo original: solo cuenta el nombre del archivo
+    doc = modelo_sintetico.crear_documento("Casa original")
+    doc.PathName = "C:\\Proyectos\\VIDEO\\Casa original.rvt"
+    simulador.reiniciar(doc)
+    out = simulador.ejecutar_nodo(RUTA_PIEZAS, [])
+    assert out.startswith("NO SE HIZO NADA") and len(doc._elementos) == antes, out[:200]
+    # La copia en esa misma carpeta sí trabaja
+    doc = modelo_sintetico.crear_documento("Casa original_VIDEO")
+    doc.PathName = "C:\\Proyectos\\VIDEO\\Casa original_VIDEO.rvt"
+    simulador.reiniciar(doc)
+    out = simulador.ejecutar_nodo(RUTA_PIEZAS, [])
+    assert not out.startswith("NO SE HIZO NADA") and simulador.estado.piezas_creadas > 0, out[:200]
 
 
 def piezas_de(doc):

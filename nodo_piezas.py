@@ -333,7 +333,9 @@ def ejecutar(entradas):
     t0 = time.time()
     try:
         doc = DocumentManager.Instance.CurrentDBDocument
-        nombre = (doc.Title or "") + " " + (doc.PathName or "")
+        # Solo el NOMBRE del archivo, no la ruta: una carpeta "VIDEO" no debe habilitar el modelo original
+        ruta = doc.PathName or ""
+        nombre = ruta.replace("\\", "/").split("/")[-1] if ruta else (doc.Title or "")
         if NOMBRE_REQUERIDO.upper() not in nombre.upper():
             return ("NO SE HIZO NADA: este nodo solo trabaja en una COPIA del modelo cuyo nombre "
                     "contenga '%s' (por ejemplo, MODELO_VIDEO.rvt). Archivo actual: %s"
